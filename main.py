@@ -18,18 +18,30 @@ st.markdown("""
 # 3. 데이터 로딩 함수 (캐싱으로 속도 향상)
 @st.cache_data(ttl=3600)
 def get_market_data():
+    # 지수 종목 코드 재확인
     tickers = {"KOSPI": "^KS11", "NASDAQ": "^IXIC", "GOLD": "GC=F", "환율": "KRW=X"}
     info = []
     for name, ticker in tickers.items():
         try:
-            hist = yf.Ticker(ticker).history(period="2d")
-            curr = hist['Close'].iloc[-1]
-            diff = curr - hist['Close'].iloc[-2]
-            color = "red" if diff > 0 else "blue"
-            sym = "▲" if diff > 0 else "▼"
-            info.append({"name": name, "val": f"{curr:,.2f}", "diff": f"{sym}{abs(diff):,.2f}", "color": color})
-        except:
-            info.append({"name": name, "val": "Error", "diff": "-", "color": "black"})
+            # period를 5d로 넉넉하게 잡고 데이터를 가져옵니다.
+            ticker_obj = yf.Ticker(ticker)
+            hist = ticker_obj.history(period="5d")
+            
+            if not hist.empty and len(hist) >= 2:
+                # 데이터 형식을 단일 인덱스로 정리 (라이브러리 버전 차이 방지)
+                if isinstance(hist.columns, pd.MultiIndex):
+                    hist.columns = hist.columns.get_level_values(0)
+                
+                curr = hist['Close'].iloc[-1]
+                prev = hist['Close'].iloc[-2]
+                diff = curr - prev
+                sym = "▲" if diff > 0 else "▼"
+                info.append({"name": name, "val": f"{curr:,.2f}", "diff": f"{sym}{abs(diff):,.2f}"})
+            else:
+                info.append({"name": name, "val": "N/A", "diff": "-"})
+        except Exception as e:
+            # 에러 발생 시 로그를 남기지 않고 N/A로 표시
+            info.append({"name": name, "val": "N/A", "diff": "-"})
     return info
 
 # 4. 사이드바 - 종목 설정 관리
