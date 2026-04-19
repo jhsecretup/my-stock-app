@@ -6,29 +6,38 @@ import pandas as pd
 # 1. 페이지 설정
 st.set_page_config(page_title="비서표 투자 대시보드", layout="wide")
 
-# 2. 타이틀 및 텍스트 색상 스타일
+# 2. 레이아웃 및 텍스트 스타일 최적화
 st.markdown("""
     <style>
-    .block-container { padding-top: 2rem !important; }
+    /* 상단 여백을 넉넉히 주어 짤림 방지 */
+    .block-container { padding-top: 3.5rem !important; }
     
-    /* 타이틀 크기 (사용자님 맞춤형) */
+    /* 타이틀 스타일 */
     .title-style {
         font-size: 1.4rem !important;
         font-weight: bold;
-        margin-bottom: 1.2rem;
+        margin-bottom: 1.5rem;
+        color: #333;
     }
 
-    /* 지수 텍스트 스타일 */
-    .metric-label { font-size: 0.9rem; color: #666; margin-bottom: 2px; }
-    .metric-text { font-size: 1.1rem; font-weight: bold; white-space: nowrap; }
+    /* 지수 텍스트 크기 살짝 키움 */
+    .metric-label { font-size: 1rem; color: #666; margin-bottom: 4px; }
+    .metric-text { 
+        font-size: 1.25rem !important; /* 지수와 등락 크기를 시원하게 확대 */
+        font-weight: bold; 
+        white-space: nowrap; 
+    }
     
     /* 상승/하락 색상 */
     .up { color: #ef5350; }   /* 빨간색 */
     .down { color: #1e88e5; } /* 파란색 */
+    
+    /* 구분선 간격 조절 */
+    hr { margin: 1.5rem 0; }
     </style>
     """, unsafe_allow_html=True)
 
-# 3. 데이터 로딩 함수 (등락 기호 및 괄호 처리)
+# 3. 데이터 로딩 함수
 @st.cache_data(ttl=300)
 def get_market_data():
     tickers = {"KOSPI": "^KS11", "NASDAQ": "^IXIC", "GOLD": "GC=F", "환율": "KRW=X"}
@@ -44,7 +53,7 @@ def get_market_data():
                 
                 status = "up" if diff >= 0 else "down"
                 symbol = "▲" if diff >= 0 else "▼"
-                # 지수와 등락을 하나의 문자열로 합침: "2,500.0 (▲10.0)"
+                # 한 줄 결합 방식 유지
                 combined_val = f"{curr:,.1f} ({symbol}{abs(diff):,.1f})"
                 
                 info.append({"name": name, "val": combined_val, "status": status})
@@ -54,7 +63,7 @@ def get_market_data():
             info.append({"name": name, "val": "Error", "status": "up"})
     return info
 
-# 4. 사이드바 - 종목 설정
+# 4. 사이드바 설정
 st.sidebar.title("🛠️ 설정")
 with st.sidebar.expander("🇺🇸 NASDAQ 종목", expanded=False):
     nas_codes = [st.text_input(f"NAS 코드 {i+1}", key=f"nc{i}") for i in range(10)]
@@ -63,14 +72,13 @@ with st.sidebar.expander("🇰🇷 KOSPI 종목", expanded=False):
     kos_codes = [st.text_input(f"KOS 코드 {i+1}", key=f"kc{i}") for i in range(10)]
     kos_names = [st.text_input(f"KOS 이름 {i+1}", key=f"kn{i}") for i in range(10)]
 
-# 5. 메인 화면 상단
+# 5. 메인 상단 (제목 및 지수)
 st.markdown('<div class="title-style">📈 비서표 투자 대시보드</div>', unsafe_allow_html=True)
 
 m_info = get_market_data()
 cols = st.columns(4)
 for i, info in enumerate(m_info):
     with cols[i]:
-        # HTML을 사용하여 이름, 지수(등락)를 한 덩어리로 표시
         st.markdown(f'''
             <div class="metric-label">{info['name']}</div>
             <div class="metric-text {info['status']}">{info['val']}</div>
@@ -78,7 +86,7 @@ for i, info in enumerate(m_info):
 
 st.divider()
 
-# 6. 제어부 - 토글 버튼
+# 6. 제어부 (버튼)
 if 'tf' not in st.session_state: st.session_state.tf = "DAY"
 if 'mk' not in st.session_state: st.session_state.mk = "NASDAQ"
 
@@ -94,7 +102,7 @@ with col_mk1:
 with col_mk2:
     if st.button("KOSPI", type="primary" if st.session_state.mk=="KOSPI" else "secondary"): st.session_state.mk="KOSPI"
 
-# 7. 차트 렌더링
+# 7. 차트 영역
 analysis_list = []
 if st.session_state.mk == "NASDAQ":
     for c, n in zip(nas_codes, nas_names):
