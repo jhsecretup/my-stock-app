@@ -4,9 +4,9 @@ import mplfinance as mpf
 import pandas as pd
 
 # 1. 페이지 설정
-st.set_config = st.set_page_config(page_title="비서표 투자 대시보드", layout="wide")
+st.set_page_config(page_title="비서표 투자 대시보드", layout="wide")
 
-# 2. 스타일 시트 (변동 없음)
+# 2. 스타일 시트 (일관성 유지)
 st.markdown("""
     <style>
     .block-container { padding-top: 3.5rem !important; }
@@ -36,7 +36,7 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# 3. 이름 처리 함수
+# 3. 유틸리티 함수
 def parse_display_names(raw_name, ticker):
     if not raw_name: return ticker, ticker
     if '/' in raw_name:
@@ -46,7 +46,7 @@ def parse_display_names(raw_name, ticker):
         return l_name, c_name
     return raw_name, raw_name
 
-# 4. 데이터 로딩 함수 (V8.7 안정화)
+# 4. 데이터 로딩 함수
 @st.cache_data(ttl=300)
 def get_market_data():
     tickers = {"KOSPI": "^KS11", "NASDAQ": "^IXIC", "GOLD": "GC=F", "USD-KRW": "KRW=X"}
@@ -84,7 +84,7 @@ def get_all_stock_details(nas_c, nas_n, kos_c, kos_n):
                 except: pass
     return details
 
-# 5. 메인 레이아웃 및 사이드바
+# 5. 사이드바 및 레이아웃
 st.sidebar.title("🛠️ 종목 설정")
 with st.sidebar.expander("🇺🇸 NASDAQ 종목", expanded=True):
     nas_codes = [st.text_input(f"NAS 코드 {i+1}", key=f"nc{i}") for i in range(10)]
@@ -129,9 +129,12 @@ with tab3:
                     ticker_sym = c.strip().upper()
                     data = yf.Ticker(ticker_sym).history(period=t_map[c_tf][1], interval=t_map[c_tf][0]).tail(60)
                     if not data.empty:
-                        # 등락 판단 로직 개선 (전일 종가 대비 현재가 비교)
                         curr_price = data['Close'].iloc[-1]
-                        prev_price = yf.Ticker(ticker_sym).history(period="2d")['Close'].iloc[-2]
+                        hist_2d = yf.Ticker(ticker_sym).history(period="2d")
+                        prev_price = hist_2d['Close'].iloc[-2]
+                        
+                        # 퍼센트 계산
+                        pct_val = ((curr_price - prev_price) / prev_price) * 100
                         title_color = "red" if curr_price >= prev_price else "blue"
                         
                         _, c_name = parse_display_names(n, ticker_sym)
@@ -140,7 +143,7 @@ with tab3:
                         fig, ax = mpf.plot(data, type='candle', style=mpf.make_mpf_style(marketcolors=mpf.make_marketcolors(up='red', down='blue', inherit=True), gridstyle=':', y_on_right=True), figsize=(10, 6), returnfig=True)
                         if c_m == "NASDAQ": ax[0].set_ylabel('')
                         
-                        # 차트 제목 크기 2배 확대 (fontsize=36)
-                        ax[0].set_title(f"{c_name}  {p_disp}", fontsize=36, fontweight='bold', color=title_color, loc='center', pad=20)
+                        # 차트 제목: 크기 30, 형식 [이름 현재가 (퍼센트%)]
+                        ax[0].set_title(f"{c_name}  {p_disp} ({abs(pct_val):.2f}%)", fontsize=30, fontweight='bold', color=title_color, loc='center', pad=20)
                         st.pyplot(fig); v_idx += 1
                 except: pass
