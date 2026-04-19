@@ -2,131 +2,137 @@ import streamlit as st
 import yfinance as yf
 import mplfinance as mpf
 import pandas as pd
-from datetime import datetime
 
-# 1. 페이지 설정 (스마트폰 최적화)
-st.set_page_config(page_title="비서표 투자 대시보드", layout="wide")
+# 1. 페이지 설정 및 배경색 커스텀
+st.set_page_config(page_title="나만의 투자 대시보드", layout="wide")
 
-# 2. 스타일 커스터마이징 (CSS)
+# 2. 강력한 CSS 스타일 (색상, 크기, 위치 조절)
 st.markdown("""
     <style>
-    .stButton>button { width: 100%; font-weight: bold; }
-    .main { background-color: #f8f9fa; }
+    /* 메인 배경색 */
+    .main { background-color: #ffffff; }
+    
+    /* 상단 지수 카드 디자인 */
+    [data-testid="stMetric"] {
+        background-color: #f1f3f5;
+        border-radius: 10px;
+        padding: 15px;
+        border: 1px solid #dee2e6;
+        box-shadow: 2px 2px 5px rgba(0,0,0,0.05);
+    }
+    
+    /* 버튼 색상 및 크기 */
+    .stButton>button {
+        border-radius: 20px;
+        height: 3em;
+        font-weight: bold;
+        transition: all 0.3s;
+    }
+    
+    /* 구분선 스타일 */
+    hr { margin-top: 1rem; margin-bottom: 1rem; border-top: 2px solid #bbb; }
     </style>
     """, unsafe_allow_html=True)
 
-# 3. 데이터 로딩 함수 (캐싱으로 속도 향상)
-@st.cache_data(ttl=3600)
+# 3. 데이터 로딩 (에러 방지 로직 포함)
+@st.cache_data(ttl=300) # 5분마다 갱신
 def get_market_data():
-    # 지수 종목 코드 재확인
-    tickers = {"KOSPI": "^KS11", "NASDAQ": "^IXIC", "GOLD": "GC=F", "환율": "KRW=X"}
+    tickers = {"KOSPI": "^KS11", "NASDAQ": "^IXIC", "GOLD": "GC=F", "USD/KRW": "KRW=X"}
     info = []
     for name, ticker in tickers.items():
         try:
-            # period를 5d로 넉넉하게 잡고 데이터를 가져옵니다.
-            ticker_obj = yf.Ticker(ticker)
-            hist = ticker_obj.history(period="5d")
-            
+            hist = yf.Ticker(ticker).history(period="5d")
             if not hist.empty and len(hist) >= 2:
-                # 데이터 형식을 단일 인덱스로 정리 (라이브러리 버전 차이 방지)
-                if isinstance(hist.columns, pd.MultiIndex):
-                    hist.columns = hist.columns.get_level_values(0)
-                
-                curr = hist['Close'].iloc[-1]
-                prev = hist['Close'].iloc[-2]
+                if isinstance(hist.columns, pd.MultiIndex): hist.columns = hist.columns.get_level_values(0)
+                curr, prev = hist['Close'].iloc[-1], hist['Close'].iloc[-2]
                 diff = curr - prev
-                sym = "▲" if diff > 0 else "▼"
-                info.append({"name": name, "val": f"{curr:,.2f}", "diff": f"{sym}{abs(diff):,.2f}"})
-            else:
-                info.append({"name": name, "val": "N/A", "diff": "-"})
-        except Exception as e:
-            # 에러 발생 시 로그를 남기지 않고 N/A로 표시
-            info.append({"name": name, "val": "N/A", "diff": "-"})
+                info.append({"name": name, "val": f"{curr:,.2f}", "diff": f"{diff:,.2f}"})
+            else: info.append({"name": name, "val": "N/A", "diff": "0"})
+        except: info.append({"name": name, "val": "Error", "diff": "0"})
     return info
 
-# 4. 사이드바 - 종목 설정 관리
-st.sidebar.title("🛠️ 종목 설정")
+# 4. 사이드바 설정 (종목 관리)
+st.sidebar.header("📁 MY PORTFOLIO")
+with st.sidebar.expander("🇺🇸 NASDAQ 종목 (최대 10개)", expanded=False):
+    nas_codes = [st.text_input(f"코드 {i+1}", key=f"nc{i}") for i in range(10)]
+    nas_names = [st.text_input(f"이름 {i+1}", key=f"nn{i}") for i in range(10)]
 
-with st.sidebar.expander("🇺🇸 나스닥 설정", expanded=False):
-    nas_codes = [st.text_input(f"NAS 코드 {i+1}", key=f"nc{i}") for i in range(10)]
-    nas_names = [st.text_input(f"NAS 이름 {i+1}", key=f"nn{i}") for i in range(10)]
+with st.sidebar.expander("🇰🇷 KOSPI 종목 (최대 10개)", expanded=False):
+    kos_codes = [st.text_input(f"코드 {i+1}", key=f"kc{i}") for i in range(10)]
+    kos_names = [st.text_input(f"이름 {i+1}", key=f"kn{i}") for i in range(10)]
 
-with st.sidebar.expander("🇰🇷 코스피 설정", expanded=False):
-    kos_codes = [st.text_input(f"KOS 코드 {i+1}", key=f"kc{i}") for i in range(10)]
-    kos_names = [st.text_input(f"KOS 이름 {i+1}", key=f"kn{i}") for i in range(10)]
+# 5. 메인 레이아웃 시작
+st.title("🚀 SMART DASHBOARD")
 
-# 5. 메인 화면 상단 - 지수 정보
-st.title("📈 비서표 투자 대시보드")
+# 상단 지수 카드 배치 (위치 조절)
 m_info = get_market_data()
-cols = st.columns(4)
+m_cols = st.columns(4)
 for i, info in enumerate(m_info):
-    with cols[i]:
-        st.metric(label=info['name'], value=info['val'], delta=info['diff'], delta_color="normal")
+    with m_cols[i]:
+        st.metric(label=info['name'], value=info['val'], delta=info['diff'])
 
-st.divider()
+st.write("---")
 
-# 6. 첫째 줄 - 토글 버튼 (Session State 사용)
+# 6. 제어부 (토글 버튼 위치 및 색상)
 if 'tf' not in st.session_state: st.session_state.tf = "DAY"
 if 'mk' not in st.session_state: st.session_state.mk = "NASDAQ"
 
-col_tf1, col_tf2, col_tf3, col_sp, col_mk1, col_mk2 = st.columns([1, 1, 1, 0.5, 1, 1])
+# 버튼을 가로로 정렬
+c1, c2, c3, c4, c5 = st.columns([1,1,1,1.5,1.5])
+with c1:
+    if st.button("HOUR", use_container_width=True, type="primary" if st.session_state.tf=="HOUR" else "secondary"):
+        st.session_state.tf="HOUR"
+with c2:
+    if st.button("DAY", use_container_width=True, type="primary" if st.session_state.tf=="DAY" else "secondary"):
+        st.session_state.tf="DAY"
+with c3:
+    if st.button("WEEK", use_container_width=True, type="primary" if st.session_state.tf=="WEEK" else "secondary"):
+        st.session_state.tf="WEEK"
+with c4:
+    if st.button("NASDAQ MARKET", use_container_width=True, type="primary" if st.session_state.mk=="NASDAQ" else "secondary"):
+        st.session_state.mk="NASDAQ"
+with c5:
+    if st.button("KOSPI MARKET", use_container_width=True, type="primary" if st.session_state.mk=="KOSPI" else "secondary"):
+        st.session_state.mk="KOSPI"
 
-with col_tf1: 
-    if st.button("HOUR", type="primary" if st.session_state.tf=="HOUR" else "secondary"): st.session_state.tf="HOUR"
-with col_tf2: 
-    if st.button("DAY", type="primary" if st.session_state.tf=="DAY" else "secondary"): st.session_state.tf="DAY"
-with col_tf3: 
-    if st.button("WEEK", type="primary" if st.session_state.tf=="WEEK" else "secondary"): st.session_state.tf="WEEK"
+# 7. 차트 영역 (크기 및 색상 커스텀)
+st.subheader(f"📍 {st.session_state.mk} : {st.session_state.tf} VIEW")
 
-with col_mk1:
-    if st.button("NASDAQ", type="primary" if st.session_state.mk=="NASDAQ" else "secondary"): st.session_state.mk="NASDAQ"
-with col_mk2:
-    if st.button("KOSPI", type="primary" if st.session_state.mk=="KOSPI" else "secondary"): st.session_state.mk="KOSPI"
-
-# 7. 차트 렌더링
-st.subheader(f"📊 {st.session_state.mk} - {st.session_state.tf} 차트")
-
-# 분석 리스트 구성
+# 종목 리스트 구성
 analysis_list = []
-if st.session_state.mk == "NASDAQ":
-    for c, n in zip(nas_codes, nas_names):
-        if c: analysis_list.append((c.upper(), n if n else c.upper()))
-else:
-    for c, n in zip(kos_codes, kos_names):
-        if c: analysis_list.append((c.upper(), n if n else c.upper()))
-analysis_list.append(("GC=F", "GOLD"))
+base_idx = 0 if st.session_state.mk == "NASDAQ" else 0
+codes = nas_codes if st.session_state.mk == "NASDAQ" else kos_codes
+names = nas_names if st.session_state.mk == "NASDAQ" else kos_names
+
+for c, n in zip(codes, names):
+    if c: analysis_list.append((c.upper(), n if n else c.upper()))
+analysis_list.append(("GC=F", "GOLD(선물)"))
 
 # 시간 설정
 tf_map = {"HOUR": ("1h", "7d", "%H:00"), "DAY": ("1d", "1y", "%m/%d"), "WEEK": ("1wk", "2y", "%m/%d")}
 interval, period, d_fmt = tf_map[st.session_state.tf]
 
-# 2열 레이아웃 (스마트폰에서는 자동으로 1열로 겹쳐 보임)
+# 차트 출력 (크기 조절)
 chart_cols = st.columns(2)
 for idx, (ticker, name) in enumerate(analysis_list):
     with chart_cols[idx % 2]:
         try:
             data = yf.Ticker(ticker).history(period=period, interval=interval).tail(60)
             if not data.empty:
-                # 캔들차트 생성
-                mc = mpf.make_marketcolors(up='red', down='blue', inherit=True)
-                s = mpf.make_mpf_style(marketcolors=mc, gridstyle=':', y_on_right=True)
+                mc = mpf.make_marketcolors(up='#ef5350', down='#26a69a', inherit=True) # 색상 커스텀
+                s = mpf.make_mpf_style(marketcolors=mc, gridstyle=':', y_on_right=True, facecolor='#fafafa')
                 
-                fig, ax = mpf.plot(data, type='candle', style=s, figsize=(8, 4.5), 
-                                   returnfig=True, volume=False, ylabel='')
+                # 차트 크기 (figsize) 조절
+                fig, ax = mpf.plot(data, type='candle', style=s, figsize=(10, 5), returnfig=True, volume=False)
                 
-                # 최고/최저가 표시 로직
-                hi, lo, curr = data['High'].max(), data['Low'].min(), data['Close'].iloc[-1]
-                ax[0].set_title(f"[{name}]  NOW: {curr:,.2f}", fontsize=12, fontweight='bold')
+                ax[0].set_title(f" {name}", fontsize=14, fontweight='bold', loc='left')
                 
-                # X축 오른쪽 기준 정렬 (스트림릿은 인터랙티브 차트도 지원하지만, 요청하신 이미지 방식 유지)
-                # 눈금 설정
+                # X축 우측 정렬 유지
                 total = len(data)
-                xticks = list(range(total - 1, -1, -10))
+                xticks = list(range(total - 1, -1, -12))
                 ax[0].set_xticks(xticks)
-                ax[0].set_xticklabels([data.index[j].strftime(d_fmt) for j in xticks], fontsize=8)
+                ax[0].set_xticklabels([data.index[j].strftime(d_fmt) for j in xticks], fontsize=9)
                 
                 st.pyplot(fig)
-            else:
-                st.error(f"{ticker} 데이터 없음")
-        except Exception as e:
-            st.error(f"{ticker} 에러: {e}")
+            else: st.warning(f"{ticker} 데이터 없음")
+        except: st.error(f"{ticker} 분석 불가")
