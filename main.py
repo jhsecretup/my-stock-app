@@ -6,31 +6,29 @@ import pandas as pd
 # 1. 페이지 설정
 st.set_page_config(page_title="비서표 투자 대시보드", layout="wide")
 
-# 2. 타이틀 및 지수 한 줄 배치를 위한 핵심 스타일
+# 2. 타이틀 및 텍스트 색상 스타일
 st.markdown("""
     <style>
     .block-container { padding-top: 2rem !important; }
     
-    /* 타이틀 크기 살짝 키움 */
+    /* 타이틀 크기 (사용자님 맞춤형) */
     .title-style {
         font-size: 1.4rem !important;
         font-weight: bold;
         margin-bottom: 1.2rem;
     }
 
-    /* 지수와 등락을 한 줄로 붙이는 설정 */
-    [data-testid="stMetricValue"] {
-        display: inline-block !important;
-        font-size: 1.1rem !important;
-    }
-    [data-testid="stMetricDelta"] {
-        display: inline-block !important;
-        margin-left: 8px !important;
-    }
+    /* 지수 텍스트 스타일 */
+    .metric-label { font-size: 0.9rem; color: #666; margin-bottom: 2px; }
+    .metric-text { font-size: 1.1rem; font-weight: bold; white-space: nowrap; }
+    
+    /* 상승/하락 색상 */
+    .up { color: #ef5350; }   /* 빨간색 */
+    .down { color: #1e88e5; } /* 파란색 */
     </style>
     """, unsafe_allow_html=True)
 
-# 3. 데이터 로딩 함수 (에러 방지 강화)
+# 3. 데이터 로딩 함수 (등락 기호 및 괄호 처리)
 @st.cache_data(ttl=300)
 def get_market_data():
     tickers = {"KOSPI": "^KS11", "NASDAQ": "^IXIC", "GOLD": "GC=F", "환율": "KRW=X"}
@@ -43,11 +41,17 @@ def get_market_data():
                     hist.columns = hist.columns.get_level_values(0)
                 curr = hist['Close'].iloc[-1]
                 diff = curr - hist['Close'].iloc[-2]
-                info.append({"name": name, "val": f"{curr:,.1f}", "diff": f"{diff:,.1f}"})
+                
+                status = "up" if diff >= 0 else "down"
+                symbol = "▲" if diff >= 0 else "▼"
+                # 지수와 등락을 하나의 문자열로 합침: "2,500.0 (▲10.0)"
+                combined_val = f"{curr:,.1f} ({symbol}{abs(diff):,.1f})"
+                
+                info.append({"name": name, "val": combined_val, "status": status})
             else:
-                info.append({"name": name, "val": "N/A", "diff": "0.0"})
+                info.append({"name": name, "val": "N/A", "status": "up"})
         except:
-            info.append({"name": name, "val": "Error", "diff": "0.0"})
+            info.append({"name": name, "val": "Error", "status": "up"})
     return info
 
 # 4. 사이드바 - 종목 설정
@@ -66,8 +70,11 @@ m_info = get_market_data()
 cols = st.columns(4)
 for i, info in enumerate(m_info):
     with cols[i]:
-        # 지수 옆에 등락이 바로 붙도록 출력
-        st.metric(label=info['name'], value=info['val'], delta=info['diff'])
+        # HTML을 사용하여 이름, 지수(등락)를 한 덩어리로 표시
+        st.markdown(f'''
+            <div class="metric-label">{info['name']}</div>
+            <div class="metric-text {info['status']}">{info['val']}</div>
+        ''', unsafe_allow_html=True)
 
 st.divider()
 
@@ -76,14 +83,12 @@ if 'tf' not in st.session_state: st.session_state.tf = "DAY"
 if 'mk' not in st.session_state: st.session_state.mk = "NASDAQ"
 
 col_tf1, col_tf2, col_tf3, col_sp, col_mk1, col_mk2 = st.columns([1, 1, 1, 0.5, 1, 1])
-
 with col_tf1:
     if st.button("HOUR", type="primary" if st.session_state.tf=="HOUR" else "secondary"): st.session_state.tf="HOUR"
 with col_tf2:
     if st.button("DAY", type="primary" if st.session_state.tf=="DAY" else "secondary"): st.session_state.tf="DAY"
 with col_tf3:
     if st.button("WEEK", type="primary" if st.session_state.tf=="WEEK" else "secondary"): st.session_state.tf="WEEK"
-
 with col_mk1:
     if st.button("NASDAQ", type="primary" if st.session_state.mk=="NASDAQ" else "secondary"): st.session_state.mk="NASDAQ"
 with col_mk2:
