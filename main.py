@@ -6,33 +6,34 @@ import pandas as pd
 # 1. 페이지 설정
 st.set_page_config(page_title="비서표 투자 대시보드", layout="wide")
 
-# 2. 레이아웃 및 텍스트 스타일 최적화
+# 2. 모든 주요 요소 크기를 1.5rem으로 통일하는 스타일
 st.markdown("""
     <style>
-    /* 상단 여백을 넉넉히 주어 짤림 방지 */
+    /* 상단 여백 유지 */
     .block-container { padding-top: 3.5rem !important; }
     
-    /* 타이틀 스타일 */
+    /* 타이틀 크기: 1.5rem */
     .title-style {
-        font-size: 1.4rem !important;
+        font-size: 1.5rem !important;
         font-weight: bold;
         margin-bottom: 1.5rem;
         color: #333;
     }
 
-    /* 지수 텍스트 크기 살짝 키움 */
+    /* 지수 이름 크기: 1rem (작게 유지하여 숫자 강조) */
     .metric-label { font-size: 1rem; color: #666; margin-bottom: 4px; }
+    
+    /* 지수 및 등락 숫자 크기: 1.5rem */
     .metric-text { 
-        font-size: 1.25rem !important; /* 지수와 등락 크기를 시원하게 확대 */
+        font-size: 1.5rem !important; 
         font-weight: bold; 
         white-space: nowrap; 
     }
     
     /* 상승/하락 색상 */
-    .up { color: #ef5350; }   /* 빨간색 */
-    .down { color: #1e88e5; } /* 파란색 */
+    .up { color: #ef5350; }
+    .down { color: #1e88e5; }
     
-    /* 구분선 간격 조절 */
     hr { margin: 1.5rem 0; }
     </style>
     """, unsafe_allow_html=True)
@@ -50,12 +51,9 @@ def get_market_data():
                     hist.columns = hist.columns.get_level_values(0)
                 curr = hist['Close'].iloc[-1]
                 diff = curr - hist['Close'].iloc[-2]
-                
                 status = "up" if diff >= 0 else "down"
                 symbol = "▲" if diff >= 0 else "▼"
-                # 한 줄 결합 방식 유지
                 combined_val = f"{curr:,.1f} ({symbol}{abs(diff):,.1f})"
-                
                 info.append({"name": name, "val": combined_val, "status": status})
             else:
                 info.append({"name": name, "val": "N/A", "status": "up"})
@@ -124,7 +122,9 @@ for idx, (ticker, name) in enumerate(analysis_list):
                 mc = mpf.make_marketcolors(up='red', down='blue', inherit=True)
                 s = mpf.make_mpf_style(marketcolors=mc, gridstyle=':', y_on_right=True)
                 fig, ax = mpf.plot(data, type='candle', style=s, figsize=(8, 4.5), returnfig=True, volume=False)
-                ax[0].set_title(f"[{name}]", fontsize=12, fontweight='bold')
+                
+                # 차트 위 종목 이름 크기도 1.5rem 수준으로 확대 (fontsize=16 정도가 1.5rem과 비슷합니다)
+                ax[0].set_title(f"[{name}]", fontsize=16, fontweight='bold', loc='left')
                 
                 total = len(data)
                 xticks = list(range(total - 1, -1, -10))
