@@ -96,4 +96,27 @@ if st.session_state.mk == "NASDAQ":
         if c: analysis_list.append((c.upper(), n if n else c.upper()))
 else:
     for c, n in zip(kos_codes, kos_names):
-        if c: analysis_list.append((c.upper(), n if
+        if c: analysis_list.append((c.upper(), n if n else c.upper()))
+analysis_list.append(("GC=F", "GOLD"))
+
+tf_map = {"HOUR": ("1h", "7d", "%H:00"), "DAY": ("1d", "1y", "%m/%d"), "WEEK": ("1wk", "2y", "%m/%d")}
+interval, period, d_fmt = tf_map[st.session_state.tf]
+
+chart_cols = st.columns(2)
+for idx, (ticker, name) in enumerate(analysis_list):
+    with chart_cols[idx % 2]:
+        try:
+            data = yf.Ticker(ticker).history(period=period, interval=interval).tail(60)
+            if not data.empty:
+                mc = mpf.make_marketcolors(up='red', down='blue', inherit=True)
+                s = mpf.make_mpf_style(marketcolors=mc, gridstyle=':', y_on_right=True)
+                fig, ax = mpf.plot(data, type='candle', style=s, figsize=(8, 4.5), returnfig=True, volume=False)
+                ax[0].set_title(f"[{name}]", fontsize=12, fontweight='bold')
+                
+                total = len(data)
+                xticks = list(range(total - 1, -1, -10))
+                ax[0].set_xticks(xticks)
+                ax[0].set_xticklabels([data.index[j].strftime(d_fmt) for j in xticks], fontsize=8)
+                st.pyplot(fig)
+        except:
+            pass
