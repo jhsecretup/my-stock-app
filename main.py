@@ -6,7 +6,7 @@ import pandas as pd
 # 1. 페이지 설정
 st.set_page_config(page_title="비서표 투자 대시보드", layout="wide")
 
-# 2. 스타일 시트 (1.5rem 통일 및 정렬 최적화)
+# 2. 스타일 시트 (1.5rem 유지 및 정렬 최적화)
 st.markdown("""
     <style>
     .block-container { padding-top: 3.5rem !important; }
@@ -36,7 +36,7 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# 3. 데이터 로딩 함수 (오타 수정 및 등락률 기호 로직 강화)
+# 3. 데이터 로딩 함수 (괄호 위치 수정 및 쉼표 제거)
 @st.cache_data(ttl=300)
 def get_market_data():
     tickers = {"KOSPI": "^KS11", "NASDAQ": "^IXIC", "GOLD": "GC=F", "환율": "KRW=X"}
@@ -54,28 +54,25 @@ def get_market_data():
                 
                 status = "up" if diff >= 0 else "down"
                 symbol = "▲" if diff >= 0 else "▼"
-                # 등락률 기호 설정 (+, -)
                 pct_sign = "+" if diff > 0 else "" 
                 
-                # 문자열 결합 (오타 수정 완료)
-                combined_val = f"{curr:,.1f} ({symbol}{abs(diff):,.1f}, {pct_sign}{percent:.2f}%)"
-                info.append({"name": name, "val": combined_val, "status": status})
+                # 수정된 형식: 2,500.0 (▲10.0 +0.45%) -> 쉼표 제거 및 괄호 통합
+                combined_val = f"{curr:,.1f} ({symbol}{abs(diff):,.1f} {pct_sign}{percent:.2f}%)"
+                info.append({"name": name, "val": combined_val, "status": status, "ticker": ticker})
             else:
-                info.append({"name": name, "val": "N/A", "status": "up"})
-        except Exception as e:
-            info.append({"name": name, "val": "Data Error", "status": "up"})
+                info.append({"name": name, "val": "N/A", "status": "up", "ticker": ticker})
+        except:
+            info.append({"name": name, "val": "Data Error", "status": "up", "ticker": ticker})
     return info
 
-# 4. 사이드바 설정
+# 4. 사이드바 설정 (나중을 위해 설정창은 유지)
 st.sidebar.title("🛠️ 설정")
 with st.sidebar.expander("🇺🇸 NASDAQ 종목", expanded=False):
     nas_codes = [st.text_input(f"NAS 코드 {i+1}", key=f"nc{i}") for i in range(10)]
-    nas_names = [st.text_input(f"NAS 이름 {i+1}", key=f"nn{i}") for i in range(10)]
 with st.sidebar.expander("🇰🇷 KOSPI 종목", expanded=False):
     kos_codes = [st.text_input(f"KOS 코드 {i+1}", key=f"kc{i}") for i in range(10)]
-    kos_names = [st.text_input(f"KOS 이름 {i+1}", key=f"kn{i}") for i in range(10)]
 
-# 5. 메인 상단
+# 5. 메인 상단 (제목 및 지수)
 st.markdown('<div class="title-style">📈 비서표 투자 대시보드</div>', unsafe_allow_html=True)
 
 m_info = get_market_data()
@@ -91,43 +88,25 @@ for i, info in enumerate(m_info):
 
 st.divider()
 
-# 6. 제어부 (시장 선택 버튼만 유지)
-if 'mk' not in st.session_state: st.session_state.mk = "NASDAQ"
-
-c1, c2 = st.columns(2)
-with c1:
-    if st.button("NASDAQ", type="primary" if st.session_state.mk=="NASDAQ" else "secondary", use_container_width=True): 
-        st.session_state.mk="NASDAQ"
-with c2:
-    if st.button("KOSPI", type="primary" if st.session_state.mk=="KOSPI" else "secondary", use_container_width=True): 
-        st.session_state.mk="KOSPI"
-
-# 7. 차트 영역 (중앙 정렬 및 크기 최적화)
-analysis_list = []
-if st.session_state.mk == "NASDAQ":
-    for c, n in zip(nas_codes, nas_names):
-        if c: analysis_list.append((c.upper(), n if n else c.upper()))
-else:
-    for c, n in zip(kos_codes, kos_names):
-        if c: analysis_list.append((c.upper(), n if n else c.upper()))
-analysis_list.append(("GC=F", "GOLD"))
+# 6. 시장 지수 차트 영역 (일봉 고정)
+st.markdown('<div style="text-align: center; font-size: 1.2rem; font-weight: bold; margin-bottom: 20px;">📊 주요 시장 지수 차트 (일봉)</div>', unsafe_allow_html=True)
 
 interval, period, d_fmt = "1d", "1y", "%m/%d"
 
+# 4개의 주요 지수 차트만 2x2 배열로 표시
 chart_cols = st.columns(2)
-for idx, (ticker, name) in enumerate(analysis_list):
+for idx, info in enumerate(m_info):
     with chart_cols[idx % 2]:
         try:
-            data = yf.Ticker(ticker).history(period=period, interval=interval).tail(60)
+            data = yf.Ticker(info['ticker']).history(period=period, interval=interval).tail(60)
             if not data.empty:
                 mc = mpf.make_marketcolors(up='red', down='blue', inherit=True)
                 s = mpf.make_mpf_style(marketcolors=mc, gridstyle=':', y_on_right=True)
                 
-                # fig 생성 시 캔텐츠가 중앙에 오도록 조정
                 fig, ax = mpf.plot(data, type='candle', style=s, figsize=(10, 6), returnfig=True, volume=False)
                 
-                # 종목명 중앙 정렬 (loc='center') 및 크기 1.5rem 대응(fontsize=16)
-                ax[0].set_title(f"[{name}]", fontsize=16, fontweight='bold', loc='center', pad=10)
+                # 종목명 중앙 정렬
+                ax[0].set_title(f"[{info['name']}]", fontsize=16, fontweight='bold', loc='center', pad=10)
                 
                 total = len(data)
                 xticks = list(range(total - 1, -1, -12))
@@ -136,4 +115,4 @@ for idx, (ticker, name) in enumerate(analysis_list):
                 
                 st.pyplot(fig)
         except:
-            st.error(f"{name} 차트를 불러올 수 없습니다.")
+            st.error(f"{info['name']} 차트를 불러올 수 없습니다.")
