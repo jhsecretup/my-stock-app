@@ -6,7 +6,7 @@ import pandas as pd
 # 1. 페이지 설정
 st.set_page_config(page_title="비서표 투자 대시보드", layout="wide")
 
-# 2. 스타일 시트 (일관된 1.5rem 및 중앙 정렬)
+# 2. 스타일 시트 (1.5rem 유지 및 리스트 슬림화)
 st.markdown("""
     <style>
     .block-container { padding-top: 3.5rem !important; }
@@ -23,44 +23,53 @@ st.markdown("""
     .up { color: #ef5350; }
     .down { color: #1e88e5; }
     
-    /* 종목 리스트 탭 전용 스타일 */
+    /* 종목 리스트 탭 슬림 스타일 */
     .list-row {
         display: flex;
         justify-content: space-around;
         align-items: center;
-        padding: 15px;
+        padding: 10px 15px; /* 패딩을 줄여 더 많이 보이게 */
         border-bottom: 1px solid #eee;
         text-align: center;
     }
-    .list-item { font-size: 1.2rem; font-weight: bold; flex: 1; }
+    .list-item { font-size: 1.1rem; font-weight: bold; flex: 1; }
+    .list-header { font-size: 1rem; font-weight: bold; color: #555; flex: 1; }
     </style>
     """, unsafe_allow_html=True)
 
-# 3. 데이터 로딩 함수 (개별 종목용 상세 데이터 포함)
+# 3. 데이터 로딩 함수
 @st.cache_data(ttl=300)
-def get_stock_details(codes, names):
-    details = []
-    for c, n in zip(codes, names):
-        if c:
-            try:
-                ticker = yf.Ticker(c.strip().upper())
-                hist = ticker.history(period="2d")
-                if not hist.empty and len(hist) >= 2:
-                    curr = hist['Close'].iloc[-1]
-                    prev = hist['Close'].iloc[-2]
-                    diff = curr - prev
-                    percent = (diff / prev) * 100
-                    details.append({
-                        "name": n if n else c.upper(),
-                        "ticker": c.upper(),
-                        "price": f"{curr:,.2f}",
-                        "change": f"{'+' if diff > 0 else ''}{diff:,.2f} ({'+' if diff > 0 else ''}{percent:.2f}%)",
-                        "status": "up" if diff >= 0 else "down"
-                    })
-            except: pass
-    return details
+def get_all_stock_details(nas_c, nas_n, kos_c, kos_n):
+    all_details = []
+    # 나스닥과 코스피 종목을 하나의 리스트로 통합
+    combined_list = []
+    for c, n in zip(nas_c, nas_n):
+        if c: combined_list.append((c.strip().upper(), n if n else c.upper()))
+    for c, n in zip(kos_c, kos_n):
+        if c: combined_list.append((c.strip().upper(), n if n else c.upper()))
+        
+    for ticker_symbol, display_name in combined_list:
+        try:
+            t = yf.Ticker(ticker_symbol)
+            hist = t.history(period="2d")
+            if not hist.empty and len(hist) >= 2:
+                curr = hist['Close'].iloc[-1]
+                prev = hist['Close'].iloc[-2]
+                diff = curr - prev
+                percent = (diff / prev) * 100
+                
+                # +, - 기호 제거 및 소수점 정돈 (금액과 퍼센트를 한 줄로)
+                change_str = f"{abs(diff):,.2f} ({abs(percent):.2f}%)"
+                
+                all_details.append({
+                    "name": display_name,
+                    "price": f"{curr:,.2f}",
+                    "change": change_str,
+                    "status": "up" if diff >= 0 else "down"
+                })
+        except: pass
+    return all_details
 
-# (기존 시장 지수 함수 계승)
 @st.cache_data(ttl=300)
 def get_market_data():
     tickers = {"KOSPI": "^KS11", "NASDAQ": "^IXIC", "GOLD": "GC=F", "USD-KRW": "KRW=X"}
@@ -74,7 +83,7 @@ def get_market_data():
             percent = (diff / prev) * 100
             status = "up" if diff >= 0 else "down"
             symbol = "▲" if diff >= 0 else "▼"
-            combined_val = f"{curr:,.1f} ({symbol}{abs(diff):,.1f} {'+' if diff>0 else ''}{percent:.2f}%)"
+            combined_val = f"{curr:,.1f} ({symbol}{abs(diff):,.1f} {percent:+.2f}%)"
             info.append({"name": name, "val": combined_val, "status": status, "ticker": ticker})
         except: pass
     return info
@@ -102,7 +111,7 @@ with tab1:
         with cols[i]:
             st.markdown(f'<div class="metric-container"><div class="metric-label">{info["name"]}</div><div class="metric-text {info["status"]}">{info["val"]}</div></div>', unsafe_allow_html=True)
     st.divider()
-    re_idx = [0, 2, 1, 3] # 모바일 최적화 순서
+    re_idx = [0, 2, 1, 3] 
     re_info = [m_info[i] for i in re_idx]
     c_cols = st.columns(2)
     for idx, info in enumerate(re_info):
@@ -112,27 +121,22 @@ with tab1:
             ax[0].set_title(f"[{info['name']}]", fontsize=16, fontweight='bold', loc='center')
             st.pyplot(fig)
 
-# --- [Tab 2: 종목 리스트 (새로 추가)] ---
+# --- [Tab 2: 통합 종목 리스트] ---
 with tab2:
-    st.markdown('<div style="text-align: center; font-size: 1.2rem; font-weight: bold; margin-bottom: 20px;">🕒 실시간 종목 현황</div>', unsafe_allow_html=True)
-    
-    market_sel = st.radio("시장 선택", ["NASDAQ", "KOSPI"], horizontal=True, key="list_market")
-    
-    # 헤더 (3분할 영역)
+    # 헤더
     st.markdown("""
-        <div class="list-row" style="background-color: #f8f9fa; border-top: 2px solid #333;">
-            <div class="list-item">종목명</div>
-            <div class="list-item">현재가</div>
-            <div class="list-item">등락 (퍼센트)</div>
+        <div class="list-row" style="background-color: #f8f9fa; border-top: 2px solid #333; margin-top: 10px;">
+            <div class="list-header">종목명</div>
+            <div class="list-header">현재가</div>
+            <div class="list-header">등락 (퍼센트)</div>
         </div>
     """, unsafe_allow_html=True)
     
-    codes = nas_codes if market_sel == "NASDAQ" else kos_codes
-    names = nas_names if market_sel == "NASDAQ" else kos_names
-    stock_list = get_stock_details(codes, names)
+    # 전 종목 통합 로딩
+    stock_list = get_all_stock_details(nas_codes, nas_names, kos_codes, kos_names)
     
     if not stock_list:
-        st.info("사이드바에 종목을 입력하면 리스트가 나타납니다.")
+        st.info("사이드바에 종목을 입력하면 여기에 통합 리스트가 나타납니다.")
     else:
         for s in stock_list:
             st.markdown(f"""
@@ -164,7 +168,6 @@ with tab3:
                     data = yf.Ticker(c.strip().upper()).history(period=period, interval=interval).tail(60)
                     if not data.empty:
                         fig, ax = mpf.plot(data, type='candle', style=mpf.make_mpf_style(marketcolors=mpf.make_marketcolors(up='red', down='blue', inherit=True), gridstyle=':', y_on_right=True), figsize=(10, 6), returnfig=True)
-                        # 티커와 한글 이름을 병기하여 가독성 확보
                         ax[0].set_title(f"[{c.upper()}] {n if n else ''} {chart_tf}", fontsize=16, fontweight='bold', loc='center')
                         st.pyplot(fig)
                         c_idx += 1
