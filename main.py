@@ -6,7 +6,7 @@ import pandas as pd
 # 1. 페이지 설정
 st.set_page_config(page_title="비서표 투자 대시보드", layout="wide")
 
-# 2. 스타일 시트 (일관성 유지)
+# 2. 스타일 시트 (상태 유지)
 st.markdown("""
     <style>
     .block-container { padding-top: 3.5rem !important; }
@@ -36,17 +36,20 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# 3. 유틸리티 함수
+# 3. 이름 처리 유틸리티 함수 (V8.6 핵심 로직)
 def parse_display_names(raw_name, ticker):
-    if not raw_name: return ticker, ticker
+    if not raw_name:
+        return ticker, ticker # 이름 없으면 둘 다 티커 사용
+    
     if '/' in raw_name:
         parts = [p.strip() for p in raw_name.split('/')]
-        l_name = parts[0] if parts[0] else ticker
-        c_name = parts[1] if len(parts) > 1 and parts[1] else l_name
-        return l_name, c_name
-    return raw_name, raw_name
+        list_name = parts[0] if parts[0] else ticker
+        chart_name = parts[1] if len(parts) > 1 and parts[1] else list_name
+        return list_name, chart_name
+    
+    return raw_name, raw_name # 슬래시 없으면 동일하게 사용
 
-# 4. 데이터 로딩 함수
+# 4. 데이터 로딩 함수 (V8.6 대응)
 @st.cache_data(ttl=300)
 def get_market_data():
     tickers = {"KOSPI": "^KS11", "NASDAQ": "^IXIC", "GOLD": "GC=F", "USD-KRW": "KRW=X"}
@@ -67,6 +70,7 @@ def get_market_data():
 @st.cache_data(ttl=300)
 def get_all_stock_details(nas_c, nas_n, kos_c, kos_n):
     details = []
+    # 나스닥/코스피 통합 처리
     combined = [(nas_c, nas_n, "NAS"), (kos_c, kos_n, "KOS")]
     for codes, names, m_type in combined:
         for c, n in zip(codes, names):
@@ -78,8 +82,15 @@ def get_all_stock_details(nas_c, nas_n, kos_c, kos_n):
                         curr, prev = hist['Close'].iloc[-1], hist['Close'].iloc[-2]
                         diff, pct = curr - prev, ((curr-prev)/prev)*100
                         l_name, _ = parse_display_names(n, ticker_sym)
-                        p_disp = f"{curr:,.2f}$" if m_type == "NAS" else f"{int(curr):,}"
-                        c_disp = f"{abs(diff):,.2f} ({abs(pct):.2f}%)" if m_type == "NAS" else f"{int(abs(diff)):,} ({abs(pct):.2f}%)"
+                        
+                        # 화폐 및 소수점 처리
+                        if m_type == "NAS":
+                            p_disp = f"{curr:,.2f}$"
+                            c_disp = f"{abs(diff):,.2f} ({abs(pct):.2f}%)"
+                        else:
+                            p_disp = f"{int(curr):,}"
+                            c_disp = f"{int(abs(diff)):,} ({abs(pct):.2f}%)"
+                            
                         details.append({"name": l_name, "price": p_disp, "change": c_disp, "status": "up" if diff >= 0 else "down"})
                 except: pass
     return details
@@ -88,10 +99,10 @@ def get_all_stock_details(nas_c, nas_n, kos_c, kos_n):
 st.sidebar.title("🛠️ 종목 설정")
 with st.sidebar.expander("🇺🇸 NASDAQ 종목", expanded=True):
     nas_codes = [st.text_input(f"NAS 코드 {i+1}", key=f"nc{i}") for i in range(10)]
-    nas_names = [st.text_input(f"NAS 이름 {i+1}", key=f"nn{i}") for i in range(10)]
+    nas_names = [st.text_input(f"NAS 이름 {i+1} (리스트/차트)", key=f"nn{i}", help="예: 인텔/Intel") for i in range(10)]
 with st.sidebar.expander("🇰🇷 KOSPI 종목", expanded=False):
     kos_codes = [st.text_input(f"KOS 코드 {i+1}", key=f"kc{i}") for i in range(10)]
-    kos_names = [st.text_input(f"KOS 이름 {i+1}", key=f"kn{i}") for i in range(10)]
+    kos_names = [st.text_input(f"KOS 이름 {i+1} (리스트/차트)", key=f"kn{i}", help="예: 삼성전자/Samsung") for i in range(10)]
 
 st.markdown('<div class="title-style">📈 비서표 투자 대시보드</div>', unsafe_allow_html=True)
 tab1, tab2, tab3 = st.tabs(["🏠 시장 지표 (홈)", "📋 종목 리스트", "📊 개별 종목 차트"])
@@ -110,7 +121,7 @@ with tab1:
                     ax[0].set_title(m_info[t_idx]['name'], fontsize=16, fontweight='bold'); st.pyplot(fig)
                 except: pass
 
-# --- Tab 2: 종목 리스트 ---
+# --- Tab 2: 통합 종목 리스트 ---
 with tab2:
     st.markdown("""<div class="list-row" style="background-color: #f8f9fa; border-top: 2px solid #333; margin-top: 10px;"><div class="list-header">종목명</div><div class="list-header">현재가</div><div class="list-header">등락 (퍼센트)</div></div>""", unsafe_allow_html=True)
     for s in get_all_stock_details(nas_codes, nas_names, kos_codes, kos_names):
@@ -129,21 +140,10 @@ with tab3:
                     ticker_sym = c.strip().upper()
                     data = yf.Ticker(ticker_sym).history(period=t_map[c_tf][1], interval=t_map[c_tf][0]).tail(60)
                     if not data.empty:
-                        curr_price = data['Close'].iloc[-1]
-                        hist_2d = yf.Ticker(ticker_sym).history(period="2d")
-                        prev_price = hist_2d['Close'].iloc[-2]
-                        
-                        # 퍼센트 계산
-                        pct_val = ((curr_price - prev_price) / prev_price) * 100
-                        title_color = "red" if curr_price >= prev_price else "blue"
-                        
+                        curr, prev = data['Close'].iloc[-1], data['Close'].iloc[-2]
                         _, c_name = parse_display_names(n, ticker_sym)
-                        p_disp = f"{curr_price:,.2f}$" if c_m == "NASDAQ" else f"{int(curr_price):,}"
-                        
+                        p_disp = f"{curr:,.2f}$" if c_m == "NASDAQ" else f"{int(curr):,}"
                         fig, ax = mpf.plot(data, type='candle', style=mpf.make_mpf_style(marketcolors=mpf.make_marketcolors(up='red', down='blue', inherit=True), gridstyle=':', y_on_right=True), figsize=(10, 6), returnfig=True)
                         if c_m == "NASDAQ": ax[0].set_ylabel('')
-                        
-                        # 차트 제목: 크기 30, 형식 [이름 현재가 (퍼센트%)]
-                        ax[0].set_title(f"{c_name}  {p_disp} ({abs(pct_val):.2f}%)", fontsize=30, fontweight='bold', color=title_color, loc='center', pad=20)
-                        st.pyplot(fig); v_idx += 1
+                        ax[0].set_title(f"{c_name}  {p_disp}", fontsize=18, fontweight='bold', color="red" if curr >= prev else "blue"); st.pyplot(fig); v_idx += 1
                 except: pass
