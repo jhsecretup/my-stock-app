@@ -4,11 +4,11 @@ import mplfinance as mpf
 import pandas as pd
 import json
 import os
-from datetime import datetime, timedelta
 
-# 1. 페이지 설정 및 데이터 로드 (기존 유지)
+# 1. 페이지 설정
 st.set_page_config(page_title="비서표 투자 대시보드", layout="wide")
 
+# 2. 데이터 로드/저장 함수 (V9.0 시스템 유지)
 def load_settings():
     if os.path.exists('stock_settings.json'):
         try:
@@ -23,90 +23,109 @@ def save_settings(data):
 
 saved_data = load_settings()
 
-# 2. 스타일 시트 (가독성 강화)
+# 3. 스타일 시트
 st.markdown("""
     <style>
     .block-container { padding-top: 3.5rem !important; }
     .title-style { font-size: 1.5rem !important; font-weight: bold; margin-bottom: 1.5rem; color: #333; text-align: center; }
-    .bond-card { background-color: #ffffff; padding: 20px; border-radius: 12px; border: 1px solid #e0e0e0; margin-bottom: 15px; }
-    .bond-header { font-size: 1.1rem; font-weight: bold; color: #1a5f7a; border-bottom: 2px solid #1a5f7a; padding-bottom: 5px; margin-bottom: 15px; }
-    .val-highlight { font-size: 1.4rem; font-weight: bold; color: #d32f2f; }
+    .metric-container { text-align: center; margin-bottom: 10px; }
+    .metric-label { font-size: 1rem; color: #666; }
+    .metric-text { font-size: 1.5rem !important; font-weight: bold; white-space: nowrap; }
+    .up { color: #ef5350; } .down { color: #1e88e5; }
+    .list-row { display: flex; justify-content: space-around; align-items: center; padding: 10px 15px; border-bottom: 1px solid #eee; text-align: center; }
+    .list-item { font-size: 1.1rem; font-weight: bold; flex: 1; }
+    .list-header { font-size: 1rem; font-weight: bold; color: #555; flex: 1; }
     </style>
     """, unsafe_allow_html=True)
 
-# 3. 환율 가져오기 함수 (안정성 강화)
-def get_brl_krw_fx(date_obj=None):
+# 4. 유틸리티 함수
+def parse_display_names(raw_name, ticker):
+    if not raw_name: return ticker, ticker
+    if '/' in raw_name:
+        parts = [p.strip() for p in raw_name.split('/')]
+        l_name = parts[0] if parts[0] else ticker
+        c_name = parts[1] if len(parts) > 1 and parts[1] else l_name
+        return l_name, c_name
+    return raw_name, raw_name
+
+@st.cache_data(ttl=300)
+def get_market_data():
+    tickers = {"KOSPI": "^KS11", "NASDAQ": "^IXIC", "GOLD": "GC=F", "USD-KRW": "KRW=X"}
+    info = []
+    for name, ticker in tickers.items():
+        try:
+            hist = yf.Ticker(ticker).history(period="3d")
+            if not hist.empty and len(hist) >= 2:
+                curr, prev = hist['Close'].iloc[-1], hist['Close'].iloc[-2]
+                diff, pct = curr - prev, ((curr - prev) / prev) * 100
+                status, symbol = ("up", "▲") if diff >= 0 else ("down", "▼")
+                # [수정] 소수점 제거 (int로 변환하여 콤마 표시)
+                val = f"{int(curr):,} ({symbol}{int(abs(diff)):,} {abs(pct):.2f}%)"
+                info.append({"name": name, "val": val, "status": status, "ticker": ticker})
+        except: pass
+    return info
+
+def get_stock_info(c, n, m_type):
+    if not c: return None
     try:
-        # 특정 날짜면 과거 데이터, 없으면 실시간 데이터
-        ticker_brl = "BRL=X" # USD/BRL
-        ticker_krw = "KRW=X" # USD/KRW
-        
-        if date_obj and date_obj.date() < datetime.now().date():
-            start = date_obj.strftime('%Y-%m-%d')
-            end = (date_obj + timedelta(days=5)).strftime('%Y-%m-%d')
-            b_data = yf.download(ticker_brl, start=start, end=end, progress=False)
-            k_data = yf.download(ticker_krw, start=start, end=end, progress=False)
-            brl_val = b_data['Close'].iloc[0]
-            krw_val = k_data['Close'].iloc[0]
-        else:
-            brl_val = yf.Ticker(ticker_brl).history(period="1d")['Close'].iloc[-1]
-            krw_val = yf.Ticker(ticker_krw).history(period="1d")['Close'].iloc[-1]
-            
-        return float(krw_val / brl_val)
-    except:
-        return 250.0 # 오류 시 기본값
+        ticker_sym = c.strip().upper()
+        hist = yf.Ticker(ticker_sym).history(period="2d")
+        if not hist.empty and len(hist) >= 2:
+            curr, prev = hist['Close'].iloc[-1], hist['Close'].iloc[-2]
+            diff, pct = curr - prev, ((curr-prev)/prev)*100
+            l_name, c_name = parse_display_names(n, ticker_sym)
+            # [수정] 나스닥은 소수점 둘째 자리까지 표시
+            p_disp = f"{curr:,.2f}$" if m_type == "NASDAQ" else f"{int(curr):,}"
+            c_disp = f"{abs(diff):,.2f} ({abs(pct):.2f}%)" if m_type == "NASDAQ" else f"{int(abs(diff)):,} ({abs(pct):.2f}%)"
+            return {"name": l_name, "c_name": c_name, "price": p_disp, "pct": pct, "change": c_disp, "status": "up" if diff >= 0 else "down", "curr": curr, "prev": prev}
+    except: return None
 
-# 4. 메인 레이아웃 및 탭 설정
+# 5. 사이드바 설정
+st.sidebar.title("🛠️ 종목 설정")
+new_nas_codes, new_nas_names = [], []
+with st.sidebar.expander("🇺🇸 NASDAQ 종목", expanded=True):
+    for i in range(10):
+        new_nas_codes.append(st.text_input(f"NAS 코드 {i+1}", value=saved_data['nas_codes'][i] if i < len(saved_data['nas_codes']) else "", key=f"nc{i}"))
+        new_nas_names.append(st.text_input(f"NAS 이름 {i+1}", value=saved_data['nas_names'][i] if i < len(saved_data['nas_names']) else "", key=f"nn{i}"))
+
+new_kos_codes, new_kos_names = [], []
+with st.sidebar.expander("🇰🇷 KOSPI 종목", expanded=False):
+    for i in range(10):
+        new_kos_codes.append(st.text_input(f"KOS 코드 {i+1}", value=saved_data['kos_codes'][i] if i < len(saved_data['kos_codes']) else "", key=f"kc{i}"))
+        new_kos_names.append(st.text_input(f"KOS 이름 {i+1}", value=saved_data['kos_names'][i] if i < len(saved_data['kos_names']) else "", key=f"kn{i}"))
+
+if st.sidebar.button("💾 리스트 영구 저장"):
+    save_settings({"nas_codes": new_nas_codes, "nas_names": new_nas_names, "kos_codes": new_kos_codes, "kos_names": new_kos_names})
+    st.sidebar.success("설정이 저장되었습니다!")
+
+# 6. 메인 레이아웃
 st.markdown('<div class="title-style">📈 비서표 투자 대시보드</div>', unsafe_allow_html=True)
-tabs = st.tabs(["🏠 시장 지표", "📋 종목 리스트", "📊 개별 종목 차트", "🏦 채권 정밀 관리"])
+tab1, tab2, tab3 = st.tabs(["🏠 시장 지표", "📋 종목 리스트", "📊 개별 종목 차트"])
 
-# (Tab 1, 2, 3은 기존 V9.3~9.4 로직과 동일하게 작동하므로 생략 - 실제 코드엔 포함됨)
+# --- Tab 1: 시장 지표 (소수점 제거 적용) ---
+with tab1:
+    m_info = get_market_data()
+    if m_info:
+        cols = st.columns(4)
+        for i in range(min(4, len(m_info))):
+            with cols[i]:
+                st.markdown(f'<div class="metric-container"><div class="metric-label">{m_info[i]["name"]}</div><div class="metric-text {m_info[i]["status"]}">{m_info[i]["val"]}</div></div>', unsafe_allow_html=True)
+        st.divider()
+        re_idx = [0, 2, 1, 3]
+        c_cols = st.columns(2)
+        for idx, t_idx in enumerate(re_idx):
+            if t_idx < len(m_info):
+                with c_cols[idx % 2]:
+                    try:
+                        data = yf.Ticker(m_info[t_idx]['ticker']).history(period="1y").tail(60)
+                        fig, ax = mpf.plot(data, type='candle', style=mpf.make_mpf_style(marketcolors=mpf.make_marketcolors(up='red', down='blue', inherit=True), gridstyle=':', y_on_right=True), figsize=(10, 6), returnfig=True)
+                        ax[0].set_title(m_info[t_idx]['name'], fontsize=16, fontweight='bold'); st.pyplot(fig)
+                    except: pass
 
-# --- Tab 4: 채권 정밀 관리 ---
-with tabs[3]:
-    st.subheader("🏦 브라질 국채(BNTNF) 투자 현황")
-    
-    # [설정 영역]
-    with st.expander("📝 투자 기초 정보 설정", expanded=True):
-        c1, c2, c3 = st.columns(3)
-        with c1: b_name = st.text_input("채권명", value="BNTNF 10 01/01/27")
-        with c2: b_date = st.date_input("매수 날짜", value=datetime(2024, 1, 15))
-        with c3: b_qty = st.number_input("보유 수량(주)", min_value=1, value=100)
-
-    # [매수/현재 데이터 계산]
-    m_fx = get_brl_krw_fx(b_date) # 매수 시점 환율
-    n_fx = get_brl_krw_fx()      # 현재 시점 환율
-
-    col_left, col_right = st.columns(2)
-
-    with col_left:
-        st.markdown('<div class="bond-card">', unsafe_allow_html=True)
-        st.markdown('<div class="bond-header">🗓️ 매수 시점 (Past)</div>', unsafe_allow_html=True)
-        # 매수가격은 사용자님이 증권사 앱에서 보신 정확한 수치를 입력해야 합니다.
-        m_price = st.number_input("매수 단가 (BRL)", value=780.0, step=0.01, key="m_p")
-        st.write(f"적용 환율: **{m_fx:.2f} 원/BRL**")
-        m_total = m_price * b_qty * m_fx
-        st.markdown(f"매입 총액: <span class='val-highlight' style='color:#333;'>{m_total:,.0f}원</span>", unsafe_allow_html=True)
-        st.markdown('</div>', unsafe_allow_html=True)
-
-    with col_right:
-        st.markdown('<div class="bond-card" style="border-left: 6px solid #2e7d32;">', unsafe_allow_html=True)
-        st.markdown('<div class="bond-header">🚀 현재 시점 (Present)</div>', unsafe_allow_html=True)
-        # 현재가도 증권사 앱 시세를 입력하면 환율과 연동되어 계산됩니다.
-        n_price = st.number_input("현재 단가 (BRL)", value=778.0, step=0.01, key="n_p")
-        st.write(f"실시간 환율: **{n_fx:.2f} 원/BRL**")
-        n_total = n_price * b_qty * n_fx
-        st.markdown(f"평가 총액: <span class='val-highlight'>{n_total:,.0f}원</span>", unsafe_allow_html=True)
-        st.markdown('</div>', unsafe_allow_html=True)
-
-    # [결과 요약]
-    profit = n_total - m_total
-    p_rate = (profit / m_total * 100) if m_total > 0 else 0
-    
-    st.divider()
-    res_col1, res_col2, res_col3 = st.columns(3)
-    res_col1.metric("총 수익금", f"{profit:+,.0f}원", delta=f"{profit:,.0f}")
-    res_col2.metric("수익률", f"{p_rate:+.2f}%", delta=f"{p_rate:.2f}%")
-    res_col3.metric("환율 변동", f"{n_fx - m_fx:+.2f}원", delta=f"{n_fx - m_fx:.2f}")
-
-    st.caption("※ 채권 가격(BRL)은 증권사 앱의 현재가(Clean Price)를 입력하시면 가장 정확한 원화 평가액이 계산됩니다.")
+# --- Tab 2: 종목 리스트 ---
+with tab2:
+    st.markdown("""<div class="list-row" style="background-color: #f8f9fa; border-top: 2px solid #333; margin-top: 10px;"><div class="list-header">종목명</div><div class="list-header">현재가</div><div class="list-header">등락 (퍼센트)</div></div>""", unsafe_allow_html=True)
+    for c, n in zip(new_nas_codes + new_kos_codes, new_nas_names + new_kos_names):
+        m_type = "NASDAQ" if c in new_nas_codes else "KOSPI"
+        s = get_stock_info(c, n, m_type)
+        if s: st.markdown(f
