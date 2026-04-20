@@ -8,15 +8,14 @@ import os
 # 1. 페이지 설정
 st.set_page_config(page_title="비서표 투자 대시보드", layout="wide")
 
-# 2. 데이터 로드/저장 함수 (V9.0 시스템)
+# 2. 데이터 로드/저장 함수
 def load_settings():
     if os.path.exists('stock_settings.json'):
-        with open('stock_settings.json', 'r', encoding='utf-8') as f:
-            return json.load(f)
-    return {
-        "nas_codes": [""]*10, "nas_names": [""]*10,
-        "kos_codes": [""]*10, "kos_names": [""]*10
-    }
+        try:
+            with open('stock_settings.json', 'r', encoding='utf-8') as f:
+                return json.load(f)
+        except: pass
+    return {"nas_codes": [""]*10, "nas_names": [""]*10, "kos_codes": [""]*10, "kos_names": [""]*10}
 
 def save_settings(data):
     with open('stock_settings.json', 'w', encoding='utf-8') as f:
@@ -41,7 +40,7 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# 4. 유틸리티 함수
+# 4. 유틸리티 및 데이터 함수
 def parse_display_names(raw_name, ticker):
     if not raw_name: return ticker, ticker
     if '/' in raw_name:
@@ -86,14 +85,14 @@ st.sidebar.title("🛠️ 종목 설정")
 new_nas_codes, new_nas_names = [], []
 with st.sidebar.expander("🇺🇸 NASDAQ 종목", expanded=True):
     for i in range(10):
-        new_nas_codes.append(st.text_input(f"NAS 코드 {i+1}", value=saved_data['nas_codes'][i], key=f"nc{i}"))
-        new_nas_names.append(st.text_input(f"NAS 이름 {i+1}", value=saved_data['nas_names'][i], key=f"nn{i}"))
+        new_nas_codes.append(st.text_input(f"NAS 코드 {i+1}", value=saved_data['nas_codes'][i] if i < len(saved_data['nas_codes']) else "", key=f"nc{i}"))
+        new_nas_names.append(st.text_input(f"NAS 이름 {i+1}", value=saved_data['nas_names'][i] if i < len(saved_data['nas_names']) else "", key=f"nn{i}"))
 
 new_kos_codes, new_kos_names = [], []
 with st.sidebar.expander("🇰🇷 KOSPI 종목", expanded=False):
     for i in range(10):
-        new_kos_codes.append(st.text_input(f"KOS 코드 {i+1}", value=saved_data['kos_codes'][i], key=f"kc{i}"))
-        new_kos_names.append(st.text_input(f"KOS 이름 {i+1}", value=saved_data['kos_names'][i], key=f"kn{i}"))
+        new_kos_codes.append(st.text_input(f"KOS 코드 {i+1}", value=saved_data['kos_codes'][i] if i < len(saved_data['kos_codes']) else "", key=f"kc{i}"))
+        new_kos_names.append(st.text_input(f"KOS 이름 {i+1}", value=saved_data['kos_names'][i] if i < len(saved_data['kos_names']) else "", key=f"kn{i}"))
 
 if st.sidebar.button("💾 리스트 영구 저장"):
     save_settings({"nas_codes": new_nas_codes, "nas_names": new_nas_names, "kos_codes": new_kos_codes, "kos_names": new_kos_names})
@@ -111,14 +110,16 @@ with tab1:
         for i in range(4):
             with cols[i]: st.markdown(f'<div class="metric-container"><div class="metric-label">{m_info[i]["name"]}</div><div class="metric-text {m_info[i]["status"]}">{m_info[i]["val"]}</div></div>', unsafe_allow_html=True)
         st.divider()
-        re_idx = [0, 2, 1, 3]; c_cols = st.columns(2)
+        re_idx = [0, 2, 1, 3]
+        c_cols = st.columns(2)
         for idx, t_idx in enumerate(re_idx):
-            with c_cols[idx % 2]:
-                try:
-                    data = yf.Ticker(m_info[t_idx]['ticker']).history(period="1y").tail(60)
-                    fig, ax = mpf.plot(data, type='candle', style=mpf.make_mpf_style(marketcolors=mpf.make_marketcolors(up='red', down='blue', inherit=True), gridstyle=':', y_on_right=True), figsize=(10, 6), returnfig=True)
-                    ax[0].set_title(m_info[t_idx]['name'], fontsize=16, fontweight='bold'); st.pyplot(fig)
-                except: pass
+            if t_idx < len(m_info): # Index 안전장치 추가
+                with c_cols[idx % 2]:
+                    try:
+                        data = yf.Ticker(m_info[t_idx]['ticker']).history(period="1y").tail(60)
+                        fig, ax = mpf.plot(data, type='candle', style=mpf.make_mpf_style(marketcolors=mpf.make_marketcolors(up='red', down='blue', inherit=True), gridstyle=':', y_on_right=True), figsize=(10, 6), returnfig=True)
+                        ax[0].set_title(m_info[t_idx]['name'], fontsize=16, fontweight='bold'); st.pyplot(fig)
+                    except: pass
 
 # --- Tab 2: 종목 리스트 ---
 with tab2:
@@ -147,7 +148,7 @@ with tab3:
                     st.pyplot(fig); v_idx += 1
                 except: pass
 
-# --- Tab 4: 채권 계산기 ---
+# --- Tab 4: 채권 계산기 (오류 수정 완료) ---
 with tab4:
     st.subheader("🏦 브라질 국채(BNTNF) 투자 관리")
     st.markdown('<div class="bond-card">', unsafe_allow_html=True)
@@ -159,7 +160,8 @@ with tab4:
     with col2:
         buy_amount_brl = st.number_input("매입금액 (BRL)", min_value=0.0, value=10000.0, step=100.0)
         buy_amount_krw = buy_amount_brl * buy_fx
-        st.info(f"총 매입금액(원화): 약 {buy_amount_krw:,.0 Korean}원")
+        # 아래 행에서 'Korean' 오타를 제거했습니다.
+        st.info(f"총 매입금액(원화): 약 {buy_amount_krw:,.0f}원")
     st.markdown('</div>', unsafe_allow_html=True)
     st.divider()
     try:
@@ -176,4 +178,4 @@ with tab4:
             st.metric("평가금액 (원화)", f"{eval_amount_krw:,.0f}원")
         pk, pr = eval_amount_krw - buy_amount_krw, ((eval_amount_krw - buy_amount_krw) / buy_amount_krw) * 100 if buy_amount_krw > 0 else 0
         st.markdown(f'<div style="text-align: center; margin-top: 20px; padding: 15px; background-color: {"#fff5f5" if pk < 0 else "#f1f8e9"}; border-radius: 10px;"><span style="font-size: 1.1rem;">예상 투자 수익: </span><span class="bond-result" style="color: {"#1e88e5" if pk < 0 else "#ef5350"};">{pk:+,,.0f}원 ({pr:+.2f}%)</span></div>', unsafe_allow_html=True)
-    except: st.error("실시간 환율 정보를 가져오지 못했습니다.")
+    except: st.error("환율 데이터를 가져오는 중입니다... 잠시만 기다려 주세요.")
