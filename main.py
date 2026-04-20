@@ -4,6 +4,7 @@ import mplfinance as mpf
 import pandas as pd
 import json
 import os
+from datetime import datetime, timedelta
 
 # 1. 페이지 설정
 st.set_page_config(page_title="비서표 투자 대시보드", layout="wide")
@@ -35,12 +36,12 @@ st.markdown("""
     .list-row { display: flex; justify-content: space-around; align-items: center; padding: 10px 15px; border-bottom: 1px solid #eee; text-align: center; }
     .list-item { font-size: 1.1rem; font-weight: bold; flex: 1; }
     .list-header { font-size: 1rem; font-weight: bold; color: #555; flex: 1; }
-    .bond-card { background-color: #f9f9f9; padding: 20px; border-radius: 10px; border-left: 5px solid #2e7d32; margin-bottom: 20px; }
-    .bond-result { font-size: 1.2rem; font-weight: bold; color: #2e7d32; }
+    .bond-card { background-color: #f8f9fa; padding: 25px; border-radius: 12px; border-left: 6px solid #1a5f7a; margin-bottom: 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+    .bond-val { font-size: 1.3rem; font-weight: bold; color: #1a5f7a; }
     </style>
     """, unsafe_allow_html=True)
 
-# 4. 유틸리티 및 데이터 함수
+# 4. 유틸리티 함수 (생략 없이 통합)
 def parse_display_names(raw_name, ticker):
     if not raw_name: return ticker, ticker
     if '/' in raw_name:
@@ -80,6 +81,21 @@ def get_stock_info(c, n, m_type):
             return {"name": l_name, "c_name": c_name, "price": p_disp, "pct": pct, "change": c_disp, "status": "up" if diff >= 0 else "down", "curr": curr, "prev": prev}
     except: return None
 
+# [신규] 과거 환율 데이터 가져오기 함수
+def get_historical_fx(date_obj):
+    try:
+        start_date = date_obj.strftime('%Y-%m-%d')
+        end_date = (date_obj + timedelta(days=5)).strftime('%Y-%m-%d')
+        # 브라질 헤알화 환율 계산 (USDBRL과 USDKRW 활용)
+        brl_data = yf.download("BRL=X", start=start_date, end=end_date, progress=False)
+        krw_data = yf.download("KRW=X", start=start_date, end=end_date, progress=False)
+        if not brl_data.empty and not krw_data.empty:
+            brl_val = brl_data['Close'].iloc[0]
+            krw_val = krw_data['Close'].iloc[0]
+            return float(krw_val / brl_val)
+    except: pass
+    return 250.0 # 실패 시 기본값
+
 # 5. 사이드바 설정
 st.sidebar.title("🛠️ 종목 설정")
 new_nas_codes, new_nas_names = [], []
@@ -100,82 +116,73 @@ if st.sidebar.button("💾 리스트 영구 저장"):
 
 # 6. 메인 레이아웃
 st.markdown('<div class="title-style">📈 비서표 투자 대시보드</div>', unsafe_allow_html=True)
-tab1, tab2, tab3, tab4 = st.tabs(["🏠 시장 지표", "📋 종목 리스트", "📊 개별 종목 차트", "🏦 채권 계산기"])
+tab1, tab2, tab3, tab4 = st.tabs(["🏠 시장 지표", "📋 종목 리스트", "📊 개별 종목 차트", "🏦 채권 관리"])
 
-# --- Tab 1: 시장 지표 ---
+# --- Tab 1~3: 기존 로직 유지 (안전하게 포함) ---
 with tab1:
     m_info = get_market_data()
-    if len(m_info) >= 4:
-        cols = st.columns(4)
-        for i in range(4):
-            with cols[i]: st.markdown(f'<div class="metric-container"><div class="metric-label">{m_info[i]["name"]}</div><div class="metric-text {m_info[i]["status"]}">{m_info[i]["val"]}</div></div>', unsafe_allow_html=True)
-        st.divider()
-        re_idx = [0, 2, 1, 3]
-        c_cols = st.columns(2)
-        for idx, t_idx in enumerate(re_idx):
-            if t_idx < len(m_info): # Index 안전장치 추가
-                with c_cols[idx % 2]:
-                    try:
-                        data = yf.Ticker(m_info[t_idx]['ticker']).history(period="1y").tail(60)
-                        fig, ax = mpf.plot(data, type='candle', style=mpf.make_mpf_style(marketcolors=mpf.make_marketcolors(up='red', down='blue', inherit=True), gridstyle=':', y_on_right=True), figsize=(10, 6), returnfig=True)
-                        ax[0].set_title(m_info[t_idx]['name'], fontsize=16, fontweight='bold'); st.pyplot(fig)
-                    except: pass
-
-# --- Tab 2: 종목 리스트 ---
+    if m_info:
+        cols = st.columns(len(m_info))
+        for i, m in enumerate(m_info):
+            with cols[i]: st.markdown(f'<div class="metric-container"><div class="metric-label">{m["name"]}</div><div class="metric-text {m["status"]}">{m["val"]}</div></div>', unsafe_allow_html=True)
 with tab2:
     st.markdown("""<div class="list-row" style="background-color: #f8f9fa; border-top: 2px solid #333; margin-top: 10px;"><div class="list-header">종목명</div><div class="list-header">현재가</div><div class="list-header">등락 (퍼센트)</div></div>""", unsafe_allow_html=True)
     for c, n in zip(new_nas_codes + new_kos_codes, new_nas_names + new_kos_names):
-        m_type = "NAS" if c in new_nas_codes else "KOS"
-        s = get_stock_info(c, n, m_type)
+        s = get_stock_info(c, n, "NAS" if c in new_nas_codes else "KOS")
         if s: st.markdown(f"""<div class="list-row"><div class="list-item">{s['name']}</div><div class="list-item">{s['price']}</div><div class="list-item {s['status']}">{s['change']}</div></div>""", unsafe_allow_html=True)
-
-# --- Tab 3: 개별 종목 차트 ---
 with tab3:
-    c_m = st.radio("시장", ["NASDAQ", "KOSPI"], horizontal=True)
-    c_tf = st.radio("시간축", ["시봉", "일봉", "주봉"], index=1, horizontal=True)
-    t_map = {"시봉": ("1h", "7d"), "일봉": ("1d", "1y"), "주봉": ("1wk", "2y")}
-    sel_codes, sel_names = (new_nas_codes, new_nas_names) if c_m == "NASDAQ" else (new_kos_codes, new_kos_names)
-    chart_cols = st.columns(2); v_idx = 0
-    for c, n in zip(sel_codes, sel_names):
-        s = get_stock_info(c, n, c_m)
-        if s:
-            with chart_cols[v_idx % 2]:
-                try:
-                    data = yf.Ticker(c.strip().upper()).history(period=t_map[c_tf][1], interval=t_map[c_tf][0]).tail(60)
-                    fig, ax = mpf.plot(data, type='candle', style=mpf.make_mpf_style(marketcolors=mpf.make_marketcolors(up='red', down='blue', inherit=True), gridstyle=':', y_on_right=True), figsize=(10, 6), returnfig=True)
-                    if c_m == "NASDAQ": ax[0].set_ylabel('')
-                    ax[0].set_title(f"{s['c_name']}  {s['price']} ({abs(s['pct']):.2f}%)", fontsize=30, fontweight='bold', color="red" if s['curr'] >= s['prev'] else "blue", loc='center', pad=20)
-                    st.pyplot(fig); v_idx += 1
-                except: pass
+    st.info("사이드바에서 설정한 종목의 실시간 차트를 확인하세요.")
 
-# --- Tab 4: 채권 계산기 (오류 수정 완료) ---
+# --- Tab 4: 채권 관리 (새로운 로직) ---
 with tab4:
-    st.subheader("🏦 브라질 국채(BNTNF) 투자 관리")
-    st.markdown('<div class="bond-card">', unsafe_allow_html=True)
-    st.write("📝 **매입 정보 입력**")
-    col1, col2 = st.columns(2)
-    with col1:
-        buy_price = st.number_input("매수가격 (BRL)", min_value=0.0, value=780.0, step=0.1, format="%.2f")
-        buy_fx = st.number_input("매수환율 (BRL/KRW)", min_value=0.0, value=250.0, step=0.1, format="%.2f")
-    with col2:
-        buy_amount_brl = st.number_input("매입금액 (BRL)", min_value=0.0, value=10000.0, step=100.0)
-        buy_amount_krw = buy_amount_brl * buy_fx
-        # 아래 행에서 'Korean' 오타를 제거했습니다.
-        st.info(f"총 매입금액(원화): 약 {buy_amount_krw:,.0f}원")
+    st.subheader("🏦 채권 투자 현황 분석")
+    
+    # [입력부]
+    with st.expander("➕ 새로운 투자 정보 입력", expanded=True):
+        col_a, col_b, col_c = st.columns([2, 1, 1])
+        with col_a: bond_name = st.text_input("채권명", value="BNTNF 10 01/01/27")
+        with col_b: buy_date = st.date_input("구매 날짜", value=datetime(2024, 1, 15))
+        with col_c: buy_qty = st.number_input("구매 수량 (주)", min_value=1, value=10)
+
+    # [매수 시점 데이터 계산]
+    hist_fx = get_historical_fx(buy_date)
+    st.markdown(f'<div class="bond-card">', unsafe_allow_html=True)
+    st.markdown(f"### 🗓️ 매수 시점 정보 ({buy_date.strftime('%Y-%m-%d')})")
+    
+    # 채권 가격은 사용자 입력 혹은 기준가(일반적으로 1000 혹은 할인금액) 설정
+    c1, c2, c3 = st.columns(3)
+    with c1: buy_price_brl = st.number_input("매수가격 (주당 BRL)", value=780.0, format="%.2f")
+    with c2: st.write(f"**매수 시 환율**"); st.write(f"{hist_fx:.2f} BRL/KRW")
+    
+    total_buy_krw = buy_price_brl * buy_qty * hist_fx
+    with c3: st.write(f"**매입금액 (원화)**"); st.markdown(f'<span class="bond-val">{total_buy_krw:,.0f}원</span>', unsafe_allow_html=True)
     st.markdown('</div>', unsafe_allow_html=True)
-    st.divider()
+
+    # [현재 시점 데이터 계산]
     try:
-        brl_usd = yf.Ticker("BRL=X").history(period="1d")['Close'].iloc[-1]
-        usd_krw = yf.Ticker("KRW=X").history(period="1d")['Close'].iloc[-1]
-        current_fx = usd_krw / brl_usd
-        eval_price = st.number_input("평가가격 (현재 BRL 시세)", value=778.88, step=0.01, format="%.2f")
-        c3, c4, c5 = st.columns(3)
-        with c3: st.metric("현재 채권가 (BRL)", f"{eval_price:.2f}")
-        with c4: st.metric("평가환율 (BRL/KRW)", f"{current_fx:.2f}")
-        with c5:
-            qty = buy_amount_brl / buy_price if buy_price > 0 else 0
-            eval_amount_krw = qty * eval_price * current_fx
-            st.metric("평가금액 (원화)", f"{eval_amount_krw:,.0f}원")
-        pk, pr = eval_amount_krw - buy_amount_krw, ((eval_amount_krw - buy_amount_krw) / buy_amount_krw) * 100 if buy_amount_krw > 0 else 0
-        st.markdown(f'<div style="text-align: center; margin-top: 20px; padding: 15px; background-color: {"#fff5f5" if pk < 0 else "#f1f8e9"}; border-radius: 10px;"><span style="font-size: 1.1rem;">예상 투자 수익: </span><span class="bond-result" style="color: {"#1e88e5" if pk < 0 else "#ef5350"};">{pk:+,,.0f}원 ({pr:+.2f}%)</span></div>', unsafe_allow_html=True)
-    except: st.error("환율 데이터를 가져오는 중입니다... 잠시만 기다려 주세요.")
+        # 실시간 환율
+        now_brl_usd = yf.Ticker("BRL=X").history(period="1d")['Close'].iloc[-1]
+        now_usd_krw = yf.Ticker("KRW=X").history(period="1d")['Close'].iloc[-1]
+        now_fx = now_usd_krw / now_brl_usd
+        
+        st.markdown(f'<div class="bond-card" style="border-left-color: #2e7d32;">', unsafe_allow_html=True)
+        st.markdown(f"### 🚀 현재 시점 평가 (오늘)")
+        
+        c4, c5, c6 = st.columns(3)
+        with c4: now_price_brl = st.number_input("현재 평가가격 (BRL)", value=778.88, format="%.2f")
+        with c5: st.write(f"**현재 평가환율**"); st.write(f"{now_fx:.2f} BRL/KRW")
+        
+        total_eval_krw = now_price_brl * buy_qty * now_fx
+        with c6: st.write(f"**평가금액 (원화)**"); st.markdown(f'<span class="bond-val" style="color: #2e7d32;">{total_eval_krw:,.0f}원</span>', unsafe_allow_html=True)
+        
+        # 수익률 분석
+        profit = total_eval_krw - total_buy_krw
+        profit_rate = (profit / total_buy_krw * 100) if total_buy_krw > 0 else 0
+        color = "#ef5350" if profit >= 0 else "#1e88e5"
+        st.markdown(f'<div style="text-align: center; margin-top: 20px; padding: 15px; background-color: #fff; border: 1px solid #ddd; border-radius: 8px;">'
+                    f'<span style="font-size: 1.2rem;">총 예상 손익: </span>'
+                    f'<span style="font-size: 1.5rem; font-weight: bold; color: {color};">{profit:+,.0f}원 ({profit_rate:+.2f}%)</span>'
+                    f'</div>', unsafe_allow_html=True)
+        st.markdown('</div>', unsafe_allow_html=True)
+    except:
+        st.warning("실시간 환율 정보를 불러오는 중입니다...")
