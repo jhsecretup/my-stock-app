@@ -128,4 +128,22 @@ with tab2:
     for c, n in zip(new_nas_codes + new_kos_codes, new_nas_names + new_kos_names):
         m_type = "NASDAQ" if c in new_nas_codes else "KOSPI"
         s = get_stock_info(c, n, m_type)
-        if s: st.markdown(f
+        if s: st.markdown(f"""<div class="list-row"><div class="list-item">{s['name']}</div><div class="list-item">{s['price']}</div><div class="list-item {s['status']}">{s['change']}</div></div>""", unsafe_allow_html=True)
+
+# --- Tab 3: 개별 종목 차트 (나스닥 소수점 2자리 적용) ---
+with tab3:
+    c_m = st.radio("시장", ["NASDAQ", "KOSPI"], horizontal=True)
+    c_tf = st.radio("시간축", ["시봉", "일봉", "주봉"], index=1, horizontal=True)
+    t_map = {"시봉": ("1h", "7d"), "일봉": ("1d", "1y"), "주봉": ("1wk", "2y")}
+    sel_codes, sel_names = (new_nas_codes, new_nas_names) if c_m == "NASDAQ" else (new_kos_codes, new_kos_names)
+    chart_cols = st.columns(2); v_idx = 0
+    for c, n in zip(sel_codes, sel_names):
+        s = get_stock_info(c, n, c_m)
+        if s:
+            with chart_cols[v_idx % 2]:
+                try:
+                    data = yf.Ticker(c.strip().upper()).history(period=t_map[c_tf][1], interval=t_map[c_tf][0]).tail(60)
+                    fig, ax = mpf.plot(data, type='candle', style=mpf.make_mpf_style(marketcolors=mpf.make_marketcolors(up='red', down='blue', inherit=True), gridstyle=':', y_on_right=True), figsize=(10, 6), returnfig=True)
+                    ax[0].set_title(f"{s['c_name']}  {s['price']} ({abs(s['pct']):.2f}%)", fontsize=28, fontweight='bold', color="red" if s['curr'] >= s['prev'] else "blue", loc='center', pad=20)
+                    st.pyplot(fig); v_idx += 1
+                except: pass
