@@ -27,32 +27,22 @@ def save_settings(data):
 
 saved_data = load_settings()
 
-# 3. 스타일 시트 (제목 복원 및 지표 크기 원복)
+# 3. 스타일 시트 (V10.5 가독성 유지)
 st.markdown("""
     <style>
-    /* 상단 여백을 살짝 늘려 제목이 잘리지 않게 조정 */
     .block-container { padding-top: 3rem !important; }
     .title-style { font-size: 1.6rem !important; font-weight: bold; margin-bottom: 1.5rem; color: #333; text-align: center; }
-    
-    /* 시장 지표 글자 크기를 이전처럼 시원하게 복원 */
     .metric-container { text-align: center; margin-bottom: 15px; }
     .metric-label { font-size: 1rem; color: #666; margin-bottom: 5px; }
     .metric-text { font-size: 1.5rem !important; font-weight: bold; white-space: nowrap; }
-    
     .up { color: #ef5350; } .down { color: #1e88e5; }
-    
-    /* 리스트 가독성 유지 */
     .list-row { display: flex; justify-content: space-around; align-items: center; padding: 10px 15px; border-bottom: 1px solid #eee; text-align: center; }
     .list-item { font-size: 1.1rem; font-weight: bold; flex: 1; }
     .list-header { font-size: 1rem; font-weight: bold; color: #555; flex: 1; }
-    
-    /* 입력 도구 간격 최적화 */
-    div[data-testid="stRadio"] > div { margin-top: -5px; }
-    div[data-testid="stSelectbox"] { margin-bottom: 15px; }
     </style>
     """, unsafe_allow_html=True)
 
-# 4. 유틸리티 및 데이터 로직
+# 4. 유틸리티 함수
 def parse_display_names(raw_name, ticker):
     if not raw_name: return ticker, ticker
     if '/' in raw_name:
@@ -92,29 +82,48 @@ def get_stock_info(c, n, m_type):
             return {"name": l_name, "c_name": c_name, "code": ticker_sym, "price": p_disp, "change": c_disp, "status": "up" if diff >= 0 else "down", "curr": curr, "prev": prev}
     except: return None
 
-# 5. 사이드바 (20개 확장)
-st.sidebar.title("🛠️ 종목 설정")
-new_nas_codes, new_nas_names = [], []
-with st.sidebar.expander("🇺🇸 NASDAQ 종목 (20)", expanded=True):
-    for i in range(20):
-        new_nas_codes.append(st.text_input(f"NAS 코드 {i+1}", value=saved_data['nas_codes'][i], key=f"nc{i}"))
-        new_nas_names.append(st.text_input(f"NAS 이름 {i+1}", value=saved_data['nas_names'][i], key=f"nn{i}"))
+# 5. 사이드바 (순서 변경 기능 추가)
+st.sidebar.title("🛠️ 종목 설정 & 순서")
 
-new_kos_codes, new_kos_names = [], []
-with st.sidebar.expander("🇰🇷 KOSPI 종목 (20)", expanded=False):
-    for i in range(20):
-        new_kos_codes.append(st.text_input(f"KOS 코드 {i+1}", value=saved_data['kos_codes'][i], key=f"kc{i}"))
-        new_kos_names.append(st.text_input(f"KOS 이름 {i+1}", value=saved_data['kos_names'][i], key=f"kn{i}"))
+def render_sidebar_section(title, codes, names, prefix):
+    new_c, new_n = [], []
+    with st.sidebar.expander(title):
+        # 🌟 순서 변경 도구
+        current_list = [f"{n if n else c}" for c, n in zip(codes, names) if c.strip()]
+        if current_list:
+            st.write("↕️ 순서 재배치 (선택 순서대로 정렬)")
+            reordered = st.multiselect("선택한 순서대로 리스트가 정렬됩니다", options=current_list, default=current_list, key=f"reorder_{prefix}", label_visibility="collapsed")
+            
+            # 재배치 로직: 선택된 순서대로 먼저 채우고 나머지는 뒤로
+            temp_map = {f"{n if n else c}": (c, n) for c, n in zip(codes, names) if c.strip()}
+            final_c, final_n = [], []
+            for item in reordered:
+                final_c.append(temp_map[item][0]); final_n.append(temp_map[item][1])
+            
+            # 입력창 렌더링 (재배치된 결과 반영)
+            for i in range(20):
+                c_val = final_c[i] if i < len(final_c) else ""
+                n_val = final_n[i] if i < len(final_n) else ""
+                c = st.text_input(f"{prefix} 코드 {i+1}", value=c_val, key=f"{prefix}c{i}")
+                n = st.text_input(f"{prefix} 이름 {i+1}", value=n_val, key=f"{prefix}n{i}")
+                new_c.append(c); new_n.append(n)
+        else:
+            for i in range(20):
+                new_c.append(st.text_input(f"{prefix} 코드 {i+1}", value=codes[i], key=f"{prefix}c{i}"))
+                new_n.append(st.text_input(f"{prefix} 이름 {i+1}", value=names[i], key=f"{prefix}n{i}"))
+    return new_c, new_n
+
+new_nas_codes, new_nas_names = render_sidebar_section("🇺🇸 NASDAQ 종목", saved_data['nas_codes'], saved_data['nas_names'], "nc")
+new_kos_codes, new_kos_names = render_sidebar_section("🇰🇷 KOSPI 종목", saved_data['kos_codes'], saved_data['kos_names'], "kc")
 
 if st.sidebar.button("💾 리스트 영구 저장"):
     save_settings({"nas_codes": new_nas_codes, "nas_names": new_nas_names, "kos_codes": new_kos_codes, "kos_names": new_kos_names})
-    st.sidebar.success("저장 완료!")
+    st.sidebar.success("정렬 및 데이터 저장 완료!")
 
-# 6. 메인 레이아웃
+# 6. 메인 레이아웃 (V10.5 유지)
 st.markdown('<div class="title-style">📈 비서표 투자 대시보드</div>', unsafe_allow_html=True)
 tab1, tab2, tab3 = st.tabs(["🏠 시장 지표", "📋 종목 리스트", "📊 개별 종목 차트"])
 
-# --- Tab 1: 시장 지표 (폰트 크기 복원) ---
 with tab1:
     m_info = get_market_data()
     if m_info:
@@ -132,7 +141,6 @@ with tab1:
                     ax[0].set_title(m['name'], fontsize=16, fontweight='bold'); st.pyplot(fig)
                 except: pass
 
-# --- Tab 2: 종목 리스트 (초압축 유지 & 제목 라벨 숨김) ---
 with tab2:
     selected_market = st.radio("", ["NASDAQ", "KOSPI"], horizontal=True, label_visibility="collapsed")
     codes = new_nas_codes if selected_market == "NASDAQ" else new_kos_codes
@@ -158,13 +166,11 @@ with tab2:
                 <div class="list-item">{s['name']}</div><div class="list-item">{s['price']}</div><div class="list-item {s['status']}">{s['change']}</div>
             </div>""", unsafe_allow_html=True)
 
-# --- Tab 3: 개별 종목 차트 (정제된 텍스트 적용) ---
 with tab3:
     if 'selected_stock_code' in st.session_state and st.session_state.selected_stock_code:
         c_tf = st.radio("", ["시봉", "일봉", "주봉"], index=1, horizontal=True)
         t_map = {"시봉": ("1h", "7d"), "일봉": ("1d", "1y"), "주봉": ("1wk", "2y")}
         code, name = st.session_state.selected_stock_code, st.session_state.selected_stock_name
-        
         try:
             data = yf.Ticker(code).history(period=t_map[c_tf][1], interval=t_map[c_tf][0]).tail(60)
             curr, prev = data['Close'].iloc[-1], data['Close'].iloc[-2]
