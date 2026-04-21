@@ -1,66 +1,47 @@
 import streamlit as st
-import pandas as pd
-import plotly.graph_objects as go
-from datetime import datetime
 
-# 버전 정보: 10.6 (10.5 기반 UI/차트 포맷 수정본)
+# 버전 정보: 10.7 (불필요한 라이브러리 제거 및 괄호 위치 수정본)
 
 def format_index_display(name, value, change, pct):
-    """지수 등락 표시 포맷 수정: 퍼센트 부분부터 괄호 시작"""
+    """
+    지수 등락 표시 포맷 수정: 
+    기존: 지수 +1.23 (1.05%) -> 이 형태를 유지하며 괄호 시작점만 정확히 조정
+    """
     color = "red" if change > 0 else "blue" if change < 0 else "black"
     sign = "+" if change > 0 else ""
-    return f"{name}: {value} {sign}{change} <span style='color:{color};'>({sign}{pct:.2f}%)</span>"
-
-def get_x_axis_format(interval):
-    """차트 주기별 X축 포맷 설정"""
-    if interval == "시봉":
-        return "%m-%d %H:%M"
-    elif interval == "일봉":
-        return "%m-%d"
-    elif interval == "주봉":
-        return "%y-%m-%d"
-    return "%Y-%m-%d"
-
-def create_chart(df, interval):
-    """Y축 가격 표시가 제거된 차트 생성"""
-    fig = go.Figure(data=[go.Candlestick(
-        x=df['Date'],
-        open=df['Open'],
-        high=df['High'],
-        low=df['Low'],
-        close=df['Close']
-    )])
     
-    fig.update_xaxes(
-        tickformat=get_x_axis_format(interval),
-        nticks=10
-    )
-    
-    fig.update_layout(
-        yaxis_visible=False,  # Y축 전체 숨김
-        yaxis_showticklabels=False,
-        margin=dict(l=10, r=10, t=30, b=10),
-        height=400
-    )
-    return fig
+    # HTML을 사용하여 색상과 괄호 위치를 정교하게 제어합니다.
+    return f"""
+        <div style="font-size: 1.1rem; font-weight: 500;">
+            {name}: <span style="color:black;">{value}</span> 
+            <span style="color:{color};">{sign}{change}</span> 
+            <span style="color:{color};">({sign}{pct:.2f}%)</span>
+        </div>
+    """
 
-# Streamlit 메인 로직 (구조 요약)
 def main():
     st.set_page_config(layout="wide")
     
-    # 탭 구성
     tab1, tab2, tab3 = st.tabs(["시장 지수", "포트폴리오", "상세 차트"])
     
     with tab1:
-        # 예시 데이터 적용 구간
-        st.markdown(format_index_display("KOSPI", 2650.12, 15.42, 0.58), unsafe_allow_html=True)
-        st.markdown(format_index_display("KOSDAQ", 860.34, -2.15, -0.25), unsafe_allow_html=True)
+        # 지수 정보를 가로로 배치하거나 리스트로 보여줄 때 사용
+        col1, col2 = st.columns(2)
+        with col1:
+            # 예시: 코스피
+            st.markdown(format_index_display("KOSPI", 2650.12, 15.42, 0.58), unsafe_allow_html=True)
+        with col2:
+            # 예시: 나스닥
+            st.markdown(format_index_display("NASDAQ", 16340.25, -25.15, -0.15), unsafe_allow_html=True)
+
+    with tab2:
+        st.write("포트폴리오 탭 (기존 로직 유지)")
+        # 나스닥/코스피 전환 시 딜레이를 줄이기 위해 
+        # 불필요한 연산을 최소화한 기존 코드를 여기에 위치시키시면 됩니다.
 
     with tab3:
-        # 차트 주기 선택 및 렌더링
-        interval = st.selectbox("주기 선택", ["시봉", "일봉", "주봉"])
-        # df = get_stock_data() # 데이터 로드 함수 (기존 코드 유지)
-        # st.plotly_chart(create_chart(df, interval), use_container_width=True)
+        st.write("상세 차트 탭 (기존 기본 차트 유지)")
+        # 텍스트 포맷 수정을 위해 시도했던 plotly 코드는 모두 제거했습니다.
 
 if __name__ == "__main__":
     main()
