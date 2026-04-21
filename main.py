@@ -65,8 +65,8 @@ def get_market_data():
                 curr, prev = hist['Close'].iloc[-1], hist['Close'].iloc[-2]
                 diff, pct = curr - prev, ((curr - prev) / prev) * 100
                 status, symbol = ("up", "▲") if diff >= 0 else ("down", "▼")
-                # [수정] 괄호 시작 위치 변경: 숫자 뒤, 퍼센트 앞
-                val = f"{int(curr):,} {symbol}{int(abs(diff)):,} ({abs(pct):.2f}%)"
+                # [수정] 지수와 등락수치 사이 공백 추가
+                val = f"{int(curr):,}   {symbol}{int(abs(diff)):,} ({abs(pct):.2f}%)"
                 info.append({"name": name, "val": val, "status": status, "ticker": ticker})
         except: pass
     return info
@@ -81,7 +81,6 @@ def get_stock_info(c, n, m_type):
             diff, pct = curr - prev, ((curr-prev)/prev)*100
             l_name, c_name = parse_display_names(n, ticker_sym)
             p_disp = f"{curr:,.2f}$" if m_type == "NASDAQ" else f"{int(curr):,}"
-            # [수정] 리스트의 등락률 괄호 유지 (요청에 따라 등락수치 뒤로 괄호 이동)
             c_disp = f"{abs(diff):,.2f} ({abs(pct):.2f}%)" if m_type == "NASDAQ" else f"{int(abs(diff)):,} ({abs(pct):.2f}%)"
             return {"name": l_name, "c_name": c_name, "code": ticker_sym, "price": p_disp, "change": c_disp, "status": "up" if diff >= 0 else "down", "curr": curr, "prev": prev}
     except: return None
@@ -165,10 +164,10 @@ with tab3:
             pct = (diff / prev) * 100
             fig, ax = mpf.plot(data, type='candle', style=mpf.make_mpf_style(marketcolors=mpf.make_marketcolors(up='red', down='blue', inherit=True), gridstyle=':', y_on_right=True), figsize=(12, 7), returnfig=True)
             
-            # [수정] 차트 상단 제목 포맷: 가격 등락수치 (퍼센트%)
             p_disp = f"{curr:,.2f}$" if selected_market == "NASDAQ" else f"{int(curr):,}"
             d_disp = f"{diff:+.2f}" if selected_market == "NASDAQ" else f"{int(diff):+,}"
-            ax[0].set_title(f"{name}  {p_disp}  {d_disp} ({pct:+.2f}%)", 
+            # [수정] 차트 제목 내 현재가와 등락수치 사이 간격 확대
+            ax[0].set_title(f"{name}   {p_disp}   {d_disp} ({pct:+.2f}%)", 
                            fontsize=28, fontweight='bold', 
                            color="red" if curr >= prev else "blue", loc='center', pad=20)
             st.pyplot(fig)
