@@ -8,24 +8,24 @@ import os
 # 1. 페이지 설정
 st.set_page_config(page_title="비서표 투자 대시보드", layout="wide")
 
-# 2. 데이터 로드/저장
+# 2. 데이터 로드/저장 (캐시 무효화 로직 추가)
 def load_settings():
     if os.path.exists('stock_settings.json'):
         try:
             with open('stock_settings.json', 'r', encoding='utf-8') as f:
-                data = json.load(f)
-                for key in ['nas_codes', 'nas_names', 'kos_codes', 'kos_names']:
-                    if len(data.get(key, [])) < 20:
-                        data[key] = data.get(key, []) + [""] * (20 - len(data.get(key, [])))
-                return data
+                return json.load(f)
         except: pass
     return {"nas_codes": [""]*20, "nas_names": [""]*20, "kos_codes": [""]*20, "kos_names": [""]*20}
 
 def save_settings(data):
     with open('stock_settings.json', 'w', encoding='utf-8') as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
+    # 저장 후 세션 상태를 비워서 화면을 다시 그리도록 유도
+    st.cache_data.clear()
 
-saved_data = load_settings()
+# 초기 데이터 로드
+if 'saved_data' not in st.session_state:
+    st.session_state.saved_data = load_settings()
 
 # 3. 스타일 시트 (V10.5 가독성 유지)
 st.markdown("""
@@ -82,48 +82,47 @@ def get_stock_info(c, n, m_type):
             return {"name": l_name, "c_name": c_name, "code": ticker_sym, "price": p_disp, "change": c_disp, "status": "up" if diff >= 0 else "down", "curr": curr, "prev": prev}
     except: return None
 
-# 5. 사이드바 (순서 변경 기능 추가)
+# 5. 사이드바 (정렬 로직 정밀 수정)
 st.sidebar.title("🛠️ 종목 설정 & 순서")
 
 def render_sidebar_section(title, codes, names, prefix):
-    new_c, new_n = [], []
+    # 실제 데이터가 있는 것들만 추출
+    current_items = [{"c": c, "n": n} for c, n in zip(codes, names) if c.strip()]
+    item_labels = [f"{item['n'] if item['n'] else item['c']}" for item in current_items]
+    
     with st.sidebar.expander(title):
-        # 🌟 순서 변경 도구
-        current_list = [f"{n if n else c}" for c, n in zip(codes, names) if c.strip()]
-        if current_list:
-            st.write("↕️ 순서 재배치 (선택 순서대로 정렬)")
-            reordered = st.multiselect("선택한 순서대로 리스트가 정렬됩니다", options=current_list, default=current_list, key=f"reorder_{prefix}", label_visibility="collapsed")
-            
-            # 재배치 로직: 선택된 순서대로 먼저 채우고 나머지는 뒤로
-            temp_map = {f"{n if n else c}": (c, n) for c, n in zip(codes, names) if c.strip()}
-            final_c, final_n = [], []
-            for item in reordered:
-                final_c.append(temp_map[item][0]); final_n.append(temp_map[item][1])
-            
-            # 입력창 렌더링 (재배치된 결과 반영)
-            for i in range(20):
-                c_val = final_c[i] if i < len(final_c) else ""
-                n_val = final_n[i] if i < len(final_n) else ""
-                c = st.text_input(f"{prefix} 코드 {i+1}", value=c_val, key=f"{prefix}c{i}")
-                n = st.text_input(f"{prefix} 이름 {i+1}", value=n_val, key=f"{prefix}n{i}")
-                new_c.append(c); new_n.append(n)
-        else:
-            for i in range(20):
-                new_c.append(st.text_input(f"{prefix} 코드 {i+1}", value=codes[i], key=f"{prefix}c{i}"))
-                new_n.append(st.text_input(f"{prefix} 이름 {i+1}", value=names[i], key=f"{prefix}n{i}"))
+        st.write("↕️ 순서 재배치")
+        reordered_labels = st.multiselect("선택 순서대로 정렬됩니다", options=item_labels, default=item_labels, key=f"ms_{prefix}")
+        
+        # 재정렬된 리스트 생성
+        label_to_item = {label: item for label, item in zip(item_labels, current_items)}
+        sorted_items = [label_to_item[label] for label in reordered_labels]
+        
+        new_c, new_n = [], []
+        for i in range(20):
+            c_val = sorted_items[i]['c'] if i < len(sorted_items) else ""
+            n_val = sorted_items[i]['n'] if i < len(sorted_items) else ""
+            c = st.text_input(f"{prefix} 코드 {i+1}", value=c_val, key=f"{prefix}c{i}")
+            n = st.text_input(f"{prefix} 이름 {i+1}", value=n_val, key=f"{prefix}n{i}")
+            new_c.append(c); new_n.append(n)
     return new_c, new_n
 
-new_nas_codes, new_nas_names = render_sidebar_section("🇺🇸 NASDAQ 종목", saved_data['nas_codes'], saved_data['nas_names'], "nc")
-new_kos_codes, new_kos_names = render_sidebar_section("🇰🇷 KOSPI 종목", saved_data['kos_codes'], saved_data['kos_names'], "kc")
+new_nas_codes, new_nas_names = render_sidebar_section("🇺🇸 NASDAQ 종목", st.session_state.saved_data['nas_codes'], st.session_state.saved_data['nas_names'], "nc")
+new_kos_codes, new_kos_names = render_sidebar_section("🇰🇷 KOSPI 종목", st.session_state.saved_data['kos_codes'], st.session_state.saved_data['kos_names'], "kc")
 
-if st.sidebar.button("💾 리스트 영구 저장"):
-    save_settings({"nas_codes": new_nas_codes, "nas_names": new_nas_names, "kos_codes": new_kos_codes, "kos_names": new_kos_names})
-    st.sidebar.success("정렬 및 데이터 저장 완료!")
+if st.sidebar.button("💾 리스트 영구 저장 및 적용"):
+    new_data = {"nas_codes": new_nas_codes, "nas_names": new_nas_names, "kos_codes": new_kos_codes, "kos_names": new_kos_names}
+    save_settings(new_data)
+    st.session_state.saved_data = new_data
+    st.sidebar.success("정렬이 즉시 적용되었습니다!")
+    st.rerun() # 🌟 핵심: 화면 강제 새로고침
 
-# 6. 메인 레이아웃 (V10.5 유지)
+# 6. 메인 레이아웃
 st.markdown('<div class="title-style">📈 비서표 투자 대시보드</div>', unsafe_allow_html=True)
 tab1, tab2, tab3 = st.tabs(["🏠 시장 지표", "📋 종목 리스트", "📊 개별 종목 차트"])
 
+# --- Tab 1, 2, 3 로직은 V10.5/V10.6과 동일하게 유지 ---
+# (공간 관계상 생략하지만, 실제 코드에는 포함되어 실행됩니다)
 with tab1:
     m_info = get_market_data()
     if m_info:
@@ -145,20 +144,16 @@ with tab2:
     selected_market = st.radio("", ["NASDAQ", "KOSPI"], horizontal=True, label_visibility="collapsed")
     codes = new_nas_codes if selected_market == "NASDAQ" else new_kos_codes
     names = new_nas_names if selected_market == "NASDAQ" else new_kos_names
-    
     valid_data = [{"code": c.strip().upper(), "l_name": parse_display_names(n, c.strip().upper())[0], "c_name": parse_display_names(n, c.strip().upper())[1]} for c, n in zip(codes, names) if c.strip()]
-
     if valid_data:
         options = [d['l_name'] for d in valid_data]
         selected_l_name = st.selectbox("", options, label_visibility="collapsed")
         target_idx = options.index(selected_l_name)
         st.session_state.selected_stock_code = valid_data[target_idx]['code']
         st.session_state.selected_stock_name = valid_data[target_idx]['c_name']
-
     st.markdown(f"""<div class="list-row" style="background-color: #f8f9fa; border-top: 2px solid #333; margin-top: 5px;">
         <div class="list-header">종목명</div><div class="list-header">현재가</div><div class="list-header">등락률</div>
     </div>""", unsafe_allow_html=True)
-    
     for d in valid_data:
         s = get_stock_info(d['code'], d['l_name'], selected_market)
         if s:
