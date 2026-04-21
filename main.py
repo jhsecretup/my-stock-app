@@ -27,26 +27,31 @@ def save_settings(data):
 
 saved_data = load_settings()
 
-# 3. 스타일 시트 (10.1 버전의 깔끔한 스타일 복구)
+# 3. 스타일 시트 (초압축 레이아웃 적용)
 st.markdown("""
     <style>
-    .block-container { padding-top: 3.5rem !important; }
-    .title-style { font-size: 1.5rem !important; font-weight: bold; margin-bottom: 1.5rem; color: #333; text-align: center; }
-    .metric-container { text-align: center; margin-bottom: 10px; }
-    .metric-label { font-size: 1rem; color: #666; }
-    .metric-text { font-size: 1.5rem !important; font-weight: bold; white-space: nowrap; }
+    .block-container { padding-top: 2rem !important; }
+    .title-style { font-size: 1.4rem !important; font-weight: bold; margin-bottom: 1rem; color: #333; text-align: center; }
+    .metric-container { text-align: center; margin-bottom: 5px; }
+    .metric-text { font-size: 1.2rem !important; font-weight: bold; white-space: nowrap; }
     .up { color: #ef5350; } .down { color: #1e88e5; }
-    .list-row { display: flex; justify-content: space-around; align-items: center; padding: 10px 15px; border-bottom: 1px solid #eee; text-align: center; }
-    .list-item { font-size: 1.1rem; font-weight: bold; flex: 1; }
-    .list-header { font-size: 1rem; font-weight: bold; color: #555; flex: 1; }
+    /* 리스트 행 간격 및 폰트 압축 */
+    .list-row { display: flex; justify-content: space-around; align-items: center; padding: 6px 10px; border-bottom: 1px solid #eee; text-align: center; }
+    .list-item { font-size: 0.95rem; font-weight: bold; flex: 1; }
+    .list-header { font-size: 0.9rem; font-weight: bold; color: #555; flex: 1; }
+    /* 라디오 버튼 및 셀렉트박스 여백 최소화 */
+    div[data-testid="stRadio"] > div { margin-top: -20px; }
+    div[data-testid="stSelectbox"] { margin-top: -15px; margin-bottom: 10px; }
     </style>
     """, unsafe_allow_html=True)
 
-# 4. 유틸리티 및 데이터 함수
+# 4. 유틸리티 함수 (글자 깨짐 방지 로직 강화)
 def parse_display_names(raw_name, ticker):
     if not raw_name: return ticker, ticker
+    # 사선(/)을 기준으로 앞은 리스트용, 뒤는 차트용 이름으로 분리
     if '/' in raw_name:
         parts = [p.strip() for p in raw_name.split('/')]
+        # 깨진 문자나 공백이 들어가지 않도록 필터링
         l_name = parts[0] if parts[0] else ticker
         c_name = parts[1] if len(parts) > 1 and parts[1] else l_name
         return l_name, c_name
@@ -63,7 +68,7 @@ def get_market_data():
                 curr, prev = hist['Close'].iloc[-1], hist['Close'].iloc[-2]
                 diff, pct = curr - prev, ((curr - prev) / prev) * 100
                 status, symbol = ("up", "▲") if diff >= 0 else ("down", "▼")
-                val = f"{int(curr):,} ({symbol}{int(abs(diff)):,} {abs(pct):.2f}%)"
+                val = f"{int(curr):,} ({symbol}{int(abs(diff)):,})"
                 info.append({"name": name, "val": val, "status": status, "ticker": ticker})
         except: pass
     return info
@@ -78,11 +83,11 @@ def get_stock_info(c, n, m_type):
             diff, pct = curr - prev, ((curr-prev)/prev)*100
             l_name, c_name = parse_display_names(n, ticker_sym)
             p_disp = f"{curr:,.2f}$" if m_type == "NASDAQ" else f"{int(curr):,}"
-            c_disp = f"{abs(diff):,.2f} ({abs(pct):.2f}%)" if m_type == "NASDAQ" else f"{int(abs(diff)):,} ({abs(pct):.2f}%)"
-            return {"name": l_name, "c_name": c_name, "code": ticker_sym, "price": p_disp, "pct": pct, "change": c_disp, "status": "up" if diff >= 0 else "down", "curr": curr, "prev": prev}
+            c_disp = f"{abs(pct):.2f}%"
+            return {"name": l_name, "c_name": c_name, "code": ticker_sym, "price": p_disp, "change": f"{pct:+.2f}%", "status": "up" if diff >= 0 else "down", "curr": curr, "prev": prev}
     except: return None
 
-# 5. 사이드바 설정 (20개 확장형)
+# 5. 사이드바 (20개 확장)
 st.sidebar.title("🛠️ 종목 설정")
 new_nas_codes, new_nas_names = [], []
 with st.sidebar.expander("🇺🇸 NASDAQ 종목 (20)", expanded=True):
@@ -98,74 +103,74 @@ with st.sidebar.expander("🇰🇷 KOSPI 종목 (20)", expanded=False):
 
 if st.sidebar.button("💾 리스트 영구 저장"):
     save_settings({"nas_codes": new_nas_codes, "nas_names": new_nas_names, "kos_codes": new_kos_codes, "kos_names": new_kos_names})
-    st.sidebar.success("설정이 저장되었습니다!")
+    st.sidebar.success("저장 완료!")
 
 # 6. 메인 레이아웃
 st.markdown('<div class="title-style">📈 비서표 투자 대시보드</div>', unsafe_allow_html=True)
 tab1, tab2, tab3 = st.tabs(["🏠 시장 지표", "📋 종목 리스트", "📊 개별 종목 차트"])
 
-# --- Tab 1: 시장 지표 (V10.1 동일) ---
+# --- Tab 1: 시장 지표 ---
 with tab1:
     m_info = get_market_data()
     if m_info:
         cols = st.columns(4)
-        for i in range(min(4, len(m_info))):
+        for i, m in enumerate(m_info):
             with cols[i]:
-                st.markdown(f'<div class="metric-container"><div class="metric-label">{m_info[i]["name"]}</div><div class="metric-text {m_info[i]["status"]}">{m_info[i]["val"]}</div></div>', unsafe_allow_html=True)
+                st.markdown(f'<div class="metric-container"><div class="metric-label" style="font-size:0.8rem;">{m["name"]}</div><div class="metric-text {m["status"]}">{m["val"]}</div></div>', unsafe_allow_html=True)
         st.divider()
-        re_idx = [0, 2, 1, 3]
         c_cols = st.columns(2)
-        for idx, t_idx in enumerate(re_idx):
-            if t_idx < len(m_info):
-                with c_cols[idx % 2]:
-                    try:
-                        data = yf.Ticker(m_info[t_idx]['ticker']).history(period="1y").tail(60)
-                        fig, ax = mpf.plot(data, type='candle', style=mpf.make_mpf_style(marketcolors=mpf.make_marketcolors(up='red', down='blue', inherit=True), gridstyle=':', y_on_right=True), figsize=(10, 6), returnfig=True)
-                        ax[0].set_title(m_info[t_idx]['name'], fontsize=16, fontweight='bold'); st.pyplot(fig)
-                    except: pass
+        for idx, m in enumerate(m_info[:4]):
+            with c_cols[idx % 2]:
+                try:
+                    data = yf.Ticker(m['ticker']).history(period="1y").tail(40)
+                    fig, ax = mpf.plot(data, type='candle', style=mpf.make_mpf_style(marketcolors=mpf.make_marketcolors(up='red', down='blue', inherit=True), gridstyle=':', y_on_right=True), figsize=(8, 5), returnfig=True)
+                    ax[0].set_title(m['name'], fontsize=12, fontweight='bold'); st.pyplot(fig)
+                except: pass
 
-# --- Tab 2: 종목 리스트 (레이아웃 복구 및 선택 기능 통합) ---
+# --- Tab 2: 종목 리스트 (제목 제거 및 압축) ---
 with tab2:
-    selected_market = st.radio("시장 선택", ["NASDAQ", "KOSPI"], horizontal=True)
+    # 제목(label)을 빈 문자열로 처리하여 공간 확보
+    selected_market = st.radio("", ["NASDAQ", "KOSPI"], horizontal=True, label_visibility="collapsed")
     
-    target_codes = [c for c in (new_nas_codes if selected_market == "NASDAQ" else new_kos_codes) if c.strip()]
-    target_names = [n for c, n in zip((new_nas_codes if selected_market == "NASDAQ" else new_kos_codes), (new_nas_names if selected_market == "NASDAQ" else new_kos_names)) if c.strip()]
+    codes = new_nas_codes if selected_market == "NASDAQ" else new_kos_codes
+    names = new_nas_names if selected_market == "NASDAQ" else new_kos_names
     
-    # 🌟 핵심: 리스트 상단에 '차트 볼 종목 선택' 드롭다운 배치
-    # 이렇게 하면 2번 탭 레이아웃을 해치지 않으면서 3번 탭과 완벽 연동됩니다.
-    display_options = [f"{n if n else c}" for c, n in zip(target_codes, target_names)]
-    selected_stock_display = st.selectbox("📊 차트 분석할 종목을 선택하세요", display_options)
-    
-    # 선택된 종목의 인덱스를 찾아 세션에 저장
-    if selected_stock_display:
-        idx = display_options.index(selected_stock_display)
-        st.session_state.selected_stock_code = target_codes[idx]
-        st.session_state.selected_stock_name = target_names[idx]
+    # 실제 입력된 종목만 필터링
+    valid_data = []
+    for c, n in zip(codes, names):
+        if c.strip():
+            l_n, c_n = parse_display_names(n, c.strip().upper())
+            valid_data.append({"code": c.strip().upper(), "l_name": l_n, "c_name": c_n})
 
-    # 리스트 본문 (V10.1의 깔끔한 텍스트 행 방식 복구)
-    st.markdown(f"""<div class="list-row" style="background-color: #f8f9fa; border-top: 2px solid #333; margin-top: 10px;">
-        <div class="list-header">종목명</div>
-        <div class="list-header">현재가</div>
-        <div class="list-header">등락 (퍼센트)</div>
+    if valid_data:
+        options = [d['l_name'] for d in valid_data]
+        # 셀렉트박스 제목도 숨김 처리
+        selected_l_name = st.selectbox("", options, label_visibility="collapsed")
+        
+        # 세션 업데이트
+        target_idx = options.index(selected_l_name)
+        st.session_state.selected_stock_code = valid_data[target_idx]['code']
+        st.session_state.selected_stock_name = valid_data[target_idx]['c_name']
+
+    st.markdown(f"""<div class="list-row" style="background-color: #f8f9fa; border-top: 2px solid #333; margin-top: 5px;">
+        <div class="list-header">종목명</div><div class="list-header">현재가</div><div class="list-header">등락률</div>
     </div>""", unsafe_allow_html=True)
     
-    for c, n in zip(target_codes, target_names):
-        s = get_stock_info(c, n, selected_market)
+    for d in valid_data:
+        s = get_stock_info(d['code'], d['l_name'], selected_market)
         if s:
             st.markdown(f"""<div class="list-row">
-                <div class="list-item">{s['name']}</div>
-                <div class="list-item">{s['price']}</div>
-                <div class="list-item {s['status']}">{s['change']}</div>
+                <div class="list-item">{s['name']}</div><div class="list-item">{s['price']}</div><div class="list-item {s['status']}">{s['change']}</div>
             </div>""", unsafe_allow_html=True)
 
-# --- Tab 3: 개별 종목 차트 (2번 탭 선택 연동) ---
+# --- Tab 3: 개별 종목 차트 (텍스트 깨짐 해결) ---
 with tab3:
     if 'selected_stock_code' in st.session_state and st.session_state.selected_stock_code:
-        c_tf = st.radio("시간축 변환", ["시봉", "일봉", "주봉"], index=1, horizontal=True)
+        c_tf = st.radio("", ["시봉", "일봉", "주봉"], index=1, horizontal=True)
         t_map = {"시봉": ("1h", "7d"), "일봉": ("1d", "1y"), "주봉": ("1wk", "2y")}
         
         code = st.session_state.selected_stock_code
-        name = st.session_state.selected_stock_name
+        name = st.session_state.selected_stock_name # parse_display_names를 통해 이미 정제된 이름
         
         try:
             data = yf.Ticker(code).history(period=t_map[c_tf][1], interval=t_map[c_tf][0]).tail(60)
@@ -174,9 +179,8 @@ with tab3:
             
             fig, ax = mpf.plot(data, type='candle', style=mpf.make_mpf_style(marketcolors=mpf.make_marketcolors(up='red', down='blue', inherit=True), gridstyle=':', y_on_right=True), figsize=(12, 7), returnfig=True)
             p_disp = f"{curr:,.2f}$" if selected_market == "NASDAQ" else f"{int(curr):,}"
-            ax[0].set_title(f"{name}  {p_disp} ({pct:+.2f}%)", fontsize=28, fontweight='bold', color="red" if curr >= prev else "blue", loc='center', pad=20)
+            # 제목에서 불필요한 사선이나 깨진 문자 없이 이름만 깔끔하게 표시
+            ax[0].set_title(f"{name}  {p_disp} ({pct:+.2f}%)", fontsize=24, fontweight='bold', color="red" if curr >= prev else "blue", loc='center', pad=15)
             st.pyplot(fig)
         except:
-            st.error("데이터 로딩 실패")
-    else:
-        st.warning("📋 '종목 리스트' 탭에서 종목을 선택해 주세요.")
+            st.error("데이터 로드 실패")
