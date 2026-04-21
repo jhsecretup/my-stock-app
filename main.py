@@ -27,26 +27,18 @@ def save_settings(data):
 
 saved_data = load_settings()
 
-# 3. 스타일 시트 (제목 복원 및 지표 크기 원복)
+# 3. 스타일 시트
 st.markdown("""
     <style>
-    /* 상단 여백을 살짝 늘려 제목이 잘리지 않게 조정 */
     .block-container { padding-top: 3rem !important; }
     .title-style { font-size: 1.6rem !important; font-weight: bold; margin-bottom: 1.5rem; color: #333; text-align: center; }
-    
-    /* 시장 지표 글자 크기를 이전처럼 시원하게 복원 */
     .metric-container { text-align: center; margin-bottom: 15px; }
     .metric-label { font-size: 1rem; color: #666; margin-bottom: 5px; }
     .metric-text { font-size: 1.5rem !important; font-weight: bold; white-space: nowrap; }
-    
     .up { color: #ef5350; } .down { color: #1e88e5; }
-    
-    /* 리스트 가독성 유지 */
     .list-row { display: flex; justify-content: space-around; align-items: center; padding: 10px 15px; border-bottom: 1px solid #eee; text-align: center; }
     .list-item { font-size: 1.1rem; font-weight: bold; flex: 1; }
     .list-header { font-size: 1rem; font-weight: bold; color: #555; flex: 1; }
-    
-    /* 입력 도구 간격 최적화 */
     div[data-testid="stRadio"] > div { margin-top: -5px; }
     div[data-testid="stSelectbox"] { margin-bottom: 15px; }
     </style>
@@ -73,7 +65,8 @@ def get_market_data():
                 curr, prev = hist['Close'].iloc[-1], hist['Close'].iloc[-2]
                 diff, pct = curr - prev, ((curr - prev) / prev) * 100
                 status, symbol = ("up", "▲") if diff >= 0 else ("down", "▼")
-                val = f"{int(curr):,} ({symbol}{int(abs(diff)):,} {abs(pct):.2f}%)"
+                # [수정] 괄호 시작 위치 변경: 숫자 뒤, 퍼센트 앞
+                val = f"{int(curr):,} {symbol}{int(abs(diff)):,} ({abs(pct):.2f}%)"
                 info.append({"name": name, "val": val, "status": status, "ticker": ticker})
         except: pass
     return info
@@ -88,11 +81,12 @@ def get_stock_info(c, n, m_type):
             diff, pct = curr - prev, ((curr-prev)/prev)*100
             l_name, c_name = parse_display_names(n, ticker_sym)
             p_disp = f"{curr:,.2f}$" if m_type == "NASDAQ" else f"{int(curr):,}"
+            # [수정] 리스트의 등락률 괄호 유지 (요청에 따라 등락수치 뒤로 괄호 이동)
             c_disp = f"{abs(diff):,.2f} ({abs(pct):.2f}%)" if m_type == "NASDAQ" else f"{int(abs(diff)):,} ({abs(pct):.2f}%)"
             return {"name": l_name, "c_name": c_name, "code": ticker_sym, "price": p_disp, "change": c_disp, "status": "up" if diff >= 0 else "down", "curr": curr, "prev": prev}
     except: return None
 
-# 5. 사이드바 (20개 확장)
+# 5. 사이드바
 st.sidebar.title("🛠️ 종목 설정")
 new_nas_codes, new_nas_names = [], []
 with st.sidebar.expander("🇺🇸 NASDAQ 종목 (20)", expanded=True):
@@ -114,7 +108,7 @@ if st.sidebar.button("💾 리스트 영구 저장"):
 st.markdown('<div class="title-style">📈 비서표 투자 대시보드</div>', unsafe_allow_html=True)
 tab1, tab2, tab3 = st.tabs(["🏠 시장 지표", "📋 종목 리스트", "📊 개별 종목 차트"])
 
-# --- Tab 1: 시장 지표 (폰트 크기 복원) ---
+# --- Tab 1: 시장 지표 ---
 with tab1:
     m_info = get_market_data()
     if m_info:
@@ -132,12 +126,11 @@ with tab1:
                     ax[0].set_title(m['name'], fontsize=16, fontweight='bold'); st.pyplot(fig)
                 except: pass
 
-# --- Tab 2: 종목 리스트 (초압축 유지 & 제목 라벨 숨김) ---
+# --- Tab 2: 종목 리스트 ---
 with tab2:
     selected_market = st.radio("", ["NASDAQ", "KOSPI"], horizontal=True, label_visibility="collapsed")
     codes = new_nas_codes if selected_market == "NASDAQ" else new_kos_codes
     names = new_nas_names if selected_market == "NASDAQ" else new_kos_names
-    
     valid_data = [{"code": c.strip().upper(), "l_name": parse_display_names(n, c.strip().upper())[0], "c_name": parse_display_names(n, c.strip().upper())[1]} for c, n in zip(codes, names) if c.strip()]
 
     if valid_data:
@@ -158,7 +151,7 @@ with tab2:
                 <div class="list-item">{s['name']}</div><div class="list-item">{s['price']}</div><div class="list-item {s['status']}">{s['change']}</div>
             </div>""", unsafe_allow_html=True)
 
-# --- Tab 3: 개별 종목 차트 (정제된 텍스트 적용) ---
+# --- Tab 3: 개별 종목 차트 ---
 with tab3:
     if 'selected_stock_code' in st.session_state and st.session_state.selected_stock_code:
         c_tf = st.radio("", ["시봉", "일봉", "주봉"], index=1, horizontal=True)
@@ -168,9 +161,15 @@ with tab3:
         try:
             data = yf.Ticker(code).history(period=t_map[c_tf][1], interval=t_map[c_tf][0]).tail(60)
             curr, prev = data['Close'].iloc[-1], data['Close'].iloc[-2]
-            pct = ((curr - prev) / prev) * 100
+            diff = curr - prev
+            pct = (diff / prev) * 100
             fig, ax = mpf.plot(data, type='candle', style=mpf.make_mpf_style(marketcolors=mpf.make_marketcolors(up='red', down='blue', inherit=True), gridstyle=':', y_on_right=True), figsize=(12, 7), returnfig=True)
+            
+            # [수정] 차트 상단 제목 포맷: 가격 등락수치 (퍼센트%)
             p_disp = f"{curr:,.2f}$" if selected_market == "NASDAQ" else f"{int(curr):,}"
-            ax[0].set_title(f"{name}  {p_disp} ({pct:+.2f}%)", fontsize=28, fontweight='bold', color="red" if curr >= prev else "blue", loc='center', pad=20)
+            d_disp = f"{diff:+.2f}" if selected_market == "NASDAQ" else f"{int(diff):+,}"
+            ax[0].set_title(f"{name}  {p_disp}  {d_disp} ({pct:+.2f}%)", 
+                           fontsize=28, fontweight='bold', 
+                           color="red" if curr >= prev else "blue", loc='center', pad=20)
             st.pyplot(fig)
         except: st.error("데이터 로드 실패")
