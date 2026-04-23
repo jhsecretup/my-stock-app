@@ -65,8 +65,7 @@ def get_market_data():
                 curr, prev = hist['Close'].iloc[-1], hist['Close'].iloc[-2]
                 diff, pct = curr - prev, ((curr - prev) / prev) * 100
                 status, symbol = ("up", "▲") if diff >= 0 else ("down", "▼")
-                # [수정] 괄호 시작 위치 변경: 숫자 뒤, 퍼센트 앞
-                val = f"{int(curr):,} {symbol}{int(abs(diff)):,} ({abs(pct):.2f}%)"
+                val = f"{int(curr):,}   {symbol}{int(abs(diff)):,} ({abs(pct):.2f}%)"
                 info.append({"name": name, "val": val, "status": status, "ticker": ticker})
         except: pass
     return info
@@ -81,13 +80,20 @@ def get_stock_info(c, n, m_type):
             diff, pct = curr - prev, ((curr-prev)/prev)*100
             l_name, c_name = parse_display_names(n, ticker_sym)
             p_disp = f"{curr:,.2f}$" if m_type == "NASDAQ" else f"{int(curr):,}"
-            # [수정] 리스트의 등락률 괄호 유지 (요청에 따라 등락수치 뒤로 괄호 이동)
             c_disp = f"{abs(diff):,.2f} ({abs(pct):.2f}%)" if m_type == "NASDAQ" else f"{int(abs(diff)):,} ({abs(pct):.2f}%)"
             return {"name": l_name, "c_name": c_name, "code": ticker_sym, "price": p_disp, "change": c_disp, "status": "up" if diff >= 0 else "down", "curr": curr, "prev": prev}
     except: return None
 
-# 5. 사이드바
-st.sidebar.title("🛠️ 종목 설정")
+# 5. 사이드바 (갱신 버튼 추가)
+st.sidebar.title("🛠️ 설정 및 관리")
+
+# [추가] 데이터 즉시 갱신 버튼
+if st.sidebar.button("🔄 데이터 즉시 갱신", use_container_width=True):
+    st.cache_data.clear()  # 저장된 모든 캐시 삭제
+    st.rerun()             # 앱 재실행
+
+st.sidebar.divider()
+
 new_nas_codes, new_nas_names = [], []
 with st.sidebar.expander("🇺🇸 NASDAQ 종목 (20)", expanded=True):
     for i in range(20):
@@ -100,7 +106,7 @@ with st.sidebar.expander("🇰🇷 KOSPI 종목 (20)", expanded=False):
         new_kos_codes.append(st.text_input(f"KOS 코드 {i+1}", value=saved_data['kos_codes'][i], key=f"kc{i}"))
         new_kos_names.append(st.text_input(f"KOS 이름 {i+1}", value=saved_data['kos_names'][i], key=f"kn{i}"))
 
-if st.sidebar.button("💾 리스트 영구 저장"):
+if st.sidebar.button("💾 리스트 영구 저장", use_container_width=True):
     save_settings({"nas_codes": new_nas_codes, "nas_names": new_nas_names, "kos_codes": new_kos_codes, "kos_names": new_kos_names})
     st.sidebar.success("저장 완료!")
 
@@ -165,10 +171,9 @@ with tab3:
             pct = (diff / prev) * 100
             fig, ax = mpf.plot(data, type='candle', style=mpf.make_mpf_style(marketcolors=mpf.make_marketcolors(up='red', down='blue', inherit=True), gridstyle=':', y_on_right=True), figsize=(12, 7), returnfig=True)
             
-            # [수정] 차트 상단 제목 포맷: 가격 등락수치 (퍼센트%)
             p_disp = f"{curr:,.2f}$" if selected_market == "NASDAQ" else f"{int(curr):,}"
             d_disp = f"{diff:+.2f}" if selected_market == "NASDAQ" else f"{int(diff):+,}"
-            ax[0].set_title(f"{name}  {p_disp}  {d_disp} ({pct:+.2f}%)", 
+            ax[0].set_title(f"{name}   {p_disp}   {d_disp} ({pct:+.2f}%)", 
                            fontsize=28, fontweight='bold', 
                            color="red" if curr >= prev else "blue", loc='center', pad=20)
             st.pyplot(fig)
