@@ -8,21 +8,29 @@ import os
 # 1. 페이지 설정
 st.set_page_config(page_title="비서표 투자 대시보드", layout="wide")
 
-# 2. 데이터 로드/저장 (파일 저장 + 텍스트 백업 병행)
+# 2. 데이터 로드/보정 함수 (오류 방지 핵심!)
 def load_settings():
-    # 세션 상태에 데이터가 있으면 우선 사용
+    # 세션 상태에 데이터가 있으면 최우선 사용
     if 'current_settings' in st.session_state:
-        return st.session_state.current_settings
-    
-    # 파일이 있으면 로드 시도
-    if os.path.exists('stock_settings.json'):
+        data = st.session_state.current_settings
+    elif os.path.exists('stock_settings.json'):
         try:
             with open('stock_settings.json', 'r', encoding='utf-8') as f:
-                return json.load(f)
-        except: pass
+                data = json.load(f)
+        except: 
+            data = {}
+    else:
+        data = {}
+
+    # [중요] 어떤 경우에도 리스트가 20개가 되도록 보정 (IndexError 방어)
+    for key in ['nas_codes', 'nas_names', 'kos_codes', 'kos_names']:
+        if key not in data:
+            data[key] = [""] * 20
+        else:
+            # 개수가 부족하면 빈 칸으로 채우고, 넘치면 자름
+            data[key] = (data[key] + [""] * 20)[:20]
     
-    # 기본값
-    return {"nas_codes": [""]*20, "nas_names": [""]*20, "kos_codes": [""]*20, "kos_names": [""]*20}
+    return data
 
 # 3. 스타일 시트
 st.markdown("""
@@ -39,7 +47,7 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# 4. 유틸리티 로직
+# 4. 유틸리티 로직 (안정적인 yfinance 기반)
 def parse_display_names(raw_name, ticker):
     if not raw_name: return ticker, ticker
     if '/' in raw_name:
@@ -86,22 +94,22 @@ def get_stock_info(c, n, m_type):
 saved_data = load_settings()
 st.sidebar.title("🛠️ 설정 및 백업")
 
-# 백업 및 복구 기능 (핵심!)
 with st.sidebar.expander("📝 설정 백업 및 복구", expanded=False):
-    st.write("아래 텍스트를 복사해서 메모장에 보관해 두시면 나중에 언제든 리스트를 복구할 수 있어요.")
+    st.write("설정 텍스트를 복사해서 따로 보관해 두세요.")
     json_str = json.dumps(saved_data, ensure_ascii=False)
     st.text_area("내 설정 데이터", value=json_str, height=100)
     
     new_json = st.text_input("복구할 데이터 붙여넣기")
     if st.button("🔄 데이터로 리스트 복구"):
         try:
-            st.session_state.current_settings = json.loads(new_json)
+            temp_data = json.loads(new_json)
+            st.session_state.current_settings = temp_data
             st.rerun()
         except: st.error("올바른 형식이 아닙니다.")
 
 st.sidebar.divider()
 
-# 종목 입력 부분
+# 종목 입력 부분 (이제 20개 고정으로 안전하게 돌아갑니다!)
 new_nas_codes, new_nas_names = [], []
 with st.sidebar.expander("🇺🇸 NASDAQ 종목 (20)", expanded=True):
     for i in range(20):
@@ -117,16 +125,15 @@ with st.sidebar.expander("🇰🇷 KOSPI 종목 (20)", expanded=False):
 if st.sidebar.button("💾 리스트 임시 저장", use_container_width=True):
     updated_data = {"nas_codes": new_nas_codes, "nas_names": new_nas_names, "kos_codes": new_kos_codes, "kos_names": new_kos_names}
     st.session_state.current_settings = updated_data
-    # 파일 저장 시도 (성공할 수도 있으므로)
     with open('stock_settings.json', 'w', encoding='utf-8') as f:
         json.dump(updated_data, f, ensure_ascii=False)
-    st.sidebar.success("브라우저 세션에 저장되었습니다! 상단 백업 텍스트를 따로 보관해 주세요.")
+    st.sidebar.success("저장 완료!")
 
-# 6. 메인 레이아웃 (기존과 동일)
+# 6. 메인 레이아웃 (이후는 동일)
 st.markdown('<div class="title-style">📈 비서표 투자 대시보드</div>', unsafe_allow_html=True)
 tab1, tab2, tab3 = st.tabs(["🏠 시장 지표", "📋 종목 리스트", "📊 개별 종목 차트"])
 
-# --- Tab 1 ---
+# ... (이하 탭 기능 코드는 이전과 동일하게 유지됩니다)
 with tab1:
     m_info = get_market_data()
     if m_info:
@@ -144,16 +151,13 @@ with tab1:
                     ax[0].set_title(m['name'], fontsize=16, fontweight='bold'); st.pyplot(fig)
                 except: pass
 
-# --- Tab 2 ---
 with tab2:
     selected_market = st.radio("", ["NASDAQ", "KOSPI"], horizontal=True, label_visibility="collapsed")
     codes = new_nas_codes if selected_market == "NASDAQ" else new_kos_codes
     names = new_nas_names if selected_market == "NASDAQ" else new_kos_names
-    
     st.markdown(f"""<div class="list-row" style="background-color: #f8f9fa; border-top: 2px solid #333; margin-top: 5px;">
         <div class="list-header">종목명</div><div class="list-header">현재가</div><div class="list-header">등락률</div>
     </div>""", unsafe_allow_html=True)
-    
     for c, n in zip(codes, names):
         s = get_stock_info(c, n, selected_market)
         if s:
@@ -161,7 +165,6 @@ with tab2:
                 <div class="list-item">{s['name']}</div><div class="list-item">{s['price']}</div><div class="list-item {s['status']}">{s['change']}</div>
             </div>""", unsafe_allow_html=True)
 
-# --- Tab 3 ---
 with tab3:
     valid_codes = [c.strip().upper() for c in (new_nas_codes if selected_market == "NASDAQ" else new_kos_codes) if c.strip()]
     if valid_codes:
@@ -170,13 +173,10 @@ with tab3:
         try:
             data = yf.Ticker(plot_code).history(period="1y", interval="1d").tail(60)
             curr, prev = data['Close'].iloc[-1], data['Close'].iloc[-2]
-            diff = curr - prev
-            pct = (diff / prev) * 100
+            diff, pct = curr - prev, ((curr - prev) / prev) * 100
             fig, ax = mpf.plot(data, type='candle', style=mpf.make_mpf_style(marketcolors=mpf.make_marketcolors(up='red', down='blue', inherit=True), gridstyle=':', y_on_right=True), figsize=(12, 7), returnfig=True)
             p_disp = f"{curr:,.2f}$" if selected_market == "NASDAQ" else f"{int(curr):,}"
             d_disp = f"{diff:+.2f}" if selected_market == "NASDAQ" else f"{int(diff):+,}"
-            ax[0].set_title(f"{target_code}   {p_disp}   {d_disp} ({pct:+.2f}%)", 
-                           fontsize=24, fontweight='bold', 
-                           color="red" if diff >= 0 else "blue", loc='center', pad=20)
+            ax[0].set_title(f"{target_code}   {p_disp}   {d_disp} ({pct:+.2f}%)", fontsize=24, fontweight='bold', color="red" if diff >= 0 else "blue", loc='center', pad=20)
             st.pyplot(fig)
         except: st.error("데이터 로드 실패")
