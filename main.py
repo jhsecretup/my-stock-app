@@ -125,7 +125,7 @@ if st.sidebar.button("💾 리스트 임시 저장", use_container_width=True):
 st.markdown('<div class="title-style">📈 비서표 투자 대시보드</div>', unsafe_allow_html=True)
 tab1, tab2, tab3 = st.tabs(["🏠 시장 지표", "📋 종목 리스트", "📊 개별 종목 차트"])
 
-# --- Tab 1: 시장 지표 ---
+# --- Tab 1 ---
 with tab1:
     m_info = get_market_data()
     if m_info:
@@ -143,7 +143,7 @@ with tab1:
                     ax[0].set_title(m['name'], fontsize=16, fontweight='bold'); st.pyplot(fig)
                 except: pass
 
-# --- Tab 2: 종목 리스트 ---
+# --- Tab 2 ---
 with tab2:
     selected_market = st.radio("시장 선택", ["NASDAQ", "KOSPI"], horizontal=True, label_visibility="collapsed")
     codes = new_nas_codes if selected_market == "NASDAQ" else new_kos_codes
@@ -158,7 +158,7 @@ with tab2:
                 <div class="list-item">{s['name']}</div><div class="list-item">{s['price']}</div><div class="list-item {s['status']}">{s['change']}</div>
             </div>""", unsafe_allow_html=True)
 
-# --- Tab 3: 개별 종목 차트 (다듬기 완료!) ---
+# --- Tab 3: 개별 종목 차트 (요청 사항 반영 버전) ---
 with tab3:
     valid_codes = [c.strip().upper() for c in (new_nas_codes if selected_market == "NASDAQ" else new_kos_codes) if c.strip()]
     if valid_codes:
@@ -166,10 +166,13 @@ with tab3:
         with col1:
             target_code = st.selectbox("📊 분석할 종목 선택", valid_codes)
         with col2:
-            c_tf = st.radio("⏰ 봉 종류", ["시봉", "일봉", "주봉"], index=1, horizontal=True)
+            # "봉 종류" 라벨을 삭제하고 버튼만 표시
+            c_tf = st.radio("", ["시봉", "일봉", "주봉"], index=1, horizontal=True, key="chart_tf", label_visibility="collapsed")
             
         plot_code = target_code + ".KS" if selected_market == "KOSPI" and not (target_code.endswith(".KS") or target_code.endswith(".KQ")) else target_code
-        t_map = {"시봉": ("1h", "7d"), "일봉": ("1d", "1y"), "주봉": ("1wk", "2y")}
+        
+        # 괄호 안 영문 표기 매핑 (글자 깨짐 방지)
+        t_map = {"시봉": ("1h", "7d", "Time"), "일봉": ("1d", "1y", "Day"), "주봉": ("1wk", "2y", "Week")}
         
         try:
             data = yf.Ticker(plot_code).history(period=t_map[c_tf][1], interval=t_map[c_tf][0]).tail(60)
@@ -178,12 +181,11 @@ with tab3:
                 diff, pct = curr - prev, ((curr - prev) / prev) * 100
                 fig, ax = mpf.plot(data, type='candle', style=mpf.make_mpf_style(marketcolors=mpf.make_marketcolors(up='red', down='blue', inherit=True), gridstyle=':', y_on_right=True), figsize=(12, 7), returnfig=True)
                 
-                # 가독성을 위해 괄호를 제거하고 텍스트만 깔끔하게 표시
                 p_disp = f"{curr:,.2f}$" if selected_market == "NASDAQ" else f"{int(curr):,}"
                 d_disp = f"{diff:+.2f}" if selected_market == "NASDAQ" else f"{int(diff):+,}"
                 
-                # 제목에서 (시봉) 같은 타이틀과 (등락률) 괄호 삭제
-                ax[0].set_title(f"{target_code}   {p_disp}   {d_disp}   {pct:+.2f}%", 
+                # 괄호 안을 영문(Time, Day, Week)으로 변경하여 제목 설정
+                ax[0].set_title(f"{target_code} ({t_map[c_tf][2]})   {p_disp}   {d_disp} ({pct:+.2f}%)", 
                                fontsize=24, fontweight='bold', 
                                color="red" if diff >= 0 else "blue", loc='center', pad=20)
                 st.pyplot(fig)
