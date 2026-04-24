@@ -155,18 +155,30 @@ with tab2:
     for c, n in zip(codes, names):
         s = get_stock_info(c, n, selected_market)
         if s:
+            # 현재가에도 status(up/down) 색상 적용
             st.markdown(f"""<div class="list-row">
-                <div class="list-item">{s['name']}</div><div class="list-item">{s['price']}</div><div class="list-item {s['status']}">{s['change']}</div>
+                <div class="list-item">{s['name']}</div><div class="list-item {s['status']}">{s['price']}</div><div class="list-item {s['status']}">{s['change']}</div>
             </div>""", unsafe_allow_html=True)
 
-# --- Tab 3: 개별 종목 차트 (수정 완료!) ---
+# --- Tab 3: 개별 종목 차트 (요청 사항 반영) ---
 with tab3:
-    valid_codes = [c.strip().upper() for c in (new_nas_codes if selected_market == "NASDAQ" else new_kos_codes) if c.strip()]
-    if valid_codes:
-        # 상단 레이아웃 분할
+    # 유효한 종목만 필터링 (이름과 코드를 묶어서 딕셔너리 생성)
+    current_codes = new_nas_codes if selected_market == "NASDAQ" else new_kos_codes
+    current_names = new_nas_names if selected_market == "NASDAQ" else new_kos_names
+    
+    stock_options = {}
+    for c, n in zip(current_codes, current_names):
+        if c.strip():
+            # 화면에 표시될 이름 결정 (이름이 없으면 코드로)
+            display_name = n.strip() if n.strip() else c.strip().upper()
+            stock_options[display_name] = c.strip().upper()
+
+    if stock_options:
         col1, col2 = st.columns([2, 1])
         with col1:
-            target_code = st.selectbox("📊 분석할 종목 선택", valid_codes)
+            # 선택은 이름으로, 결과는 코드로 받기
+            selected_name = st.selectbox("📊 분석할 종목 선택", list(stock_options.keys()))
+            target_code = stock_options[selected_name]
         with col2:
             c_tf = st.radio("⏰ 봉 종류", ["시봉", "일봉", "주봉"], index=1, horizontal=True)
             
@@ -181,7 +193,8 @@ with tab3:
                 fig, ax = mpf.plot(data, type='candle', style=mpf.make_mpf_style(marketcolors=mpf.make_marketcolors(up='red', down='blue', inherit=True), gridstyle=':', y_on_right=True), figsize=(12, 7), returnfig=True)
                 p_disp = f"{curr:,.2f}$" if selected_market == "NASDAQ" else f"{int(curr):,}"
                 d_disp = f"{diff:+.2f}" if selected_market == "NASDAQ" else f"{int(diff):+,}"
-                ax[0].set_title(f"{target_code} ({c_tf})   {p_disp}   {d_disp} ({pct:+.2f}%)", fontsize=24, fontweight='bold', color="red" if diff >= 0 else "blue", loc='center', pad=20)
+                # 차트 제목의 괄호 삭제
+                ax[0].set_title(f"{selected_name} {c_tf}   {p_disp}   {d_disp} ({pct:+.2f}%)", fontsize=24, fontweight='bold', color="red" if diff >= 0 else "blue", loc='center', pad=20)
                 st.pyplot(fig)
             else: st.warning("데이터가 없습니다.")
         except: st.error("데이터 로드 실패")
