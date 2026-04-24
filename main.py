@@ -8,7 +8,7 @@ import os
 # 1. 페이지 설정
 st.set_page_config(page_title="비서표 투자 대시보드", layout="wide")
 
-# 2. 데이터 로드/보정 함수
+# 2. 데이터 로드/보정 함수 (IndexError 및 휘발성 저장 방어)
 def load_settings():
     if 'current_settings' in st.session_state:
         data = st.session_state.current_settings
@@ -21,6 +21,7 @@ def load_settings():
     else:
         data = {}
 
+    # 모든 리스트를 무조건 20개로 맞춤
     for key in ['nas_codes', 'nas_names', 'kos_codes', 'kos_names']:
         if key not in data:
             data[key] = [""] * 20
@@ -36,7 +37,7 @@ st.markdown("""
     .metric-container { text-align: center; margin-bottom: 15px; }
     .metric-label { font-size: 1rem; color: #666; margin-bottom: 5px; }
     .metric-text { font-size: 1.5rem !important; font-weight: bold; white-space: nowrap; }
-    .up { color: #ef5350 !important; } .down { color: #1e88e5 !important; }
+    .up { color: #ef5350; } .down { color: #1e88e5; }
     .list-row { display: flex; justify-content: space-around; align-items: center; padding: 10px 15px; border-bottom: 1px solid #eee; text-align: center; }
     .list-item { font-size: 1.1rem; font-weight: bold; flex: 1; }
     .list-header { font-size: 1rem; font-weight: bold; color: #555; flex: 1; }
@@ -64,7 +65,7 @@ def get_market_data():
                 curr, prev = hist['Close'].iloc[-1], hist['Close'].iloc[-2]
                 diff, pct = curr - prev, ((curr - prev) / prev) * 100
                 status, symbol = ("up", "▲") if diff >= 0 else ("down", "▼")
-                val = f"{curr:,.2f}   {symbol}{abs(diff):,.2f} {abs(pct):.2f}%"
+                val = f"{curr:,.2f}   {symbol}{abs(diff):,.2f} ({abs(pct):.2f}%)"
                 info.append({"name": name, "val": val, "status": status, "ticker": ticker})
         except: pass
     return info
@@ -81,7 +82,7 @@ def get_stock_info(c, n, m_type):
             diff, pct = curr - prev, ((curr-prev)/prev)*100
             l_name, c_name = parse_display_names(n, c.strip().upper())
             p_disp = f"{curr:,.2f}$" if m_type == "NASDAQ" else f"{int(curr):,}"
-            c_disp = f"{abs(diff):,.2f} {abs(pct):.2f}%" if m_type == "NASDAQ" else f"{int(abs(diff)):,} {abs(pct):.2f}%"
+            c_disp = f"{abs(diff):,.2f} ({abs(pct):.2f}%)" if m_type == "NASDAQ" else f"{int(abs(diff)):,} ({abs(pct):.2f}%)"
             return {"name": l_name, "c_name": c_name, "code": ticker_sym, "price": p_disp, "change": c_disp, "status": "up" if diff >= 0 else "down"}
     except: return None
 
@@ -90,6 +91,7 @@ saved_data = load_settings()
 st.sidebar.title("🛠️ 설정 및 백업")
 
 with st.sidebar.expander("📝 설정 백업 및 복구", expanded=False):
+    st.write("설정 텍스트를 복사해서 따로 보관해 두세요.")
     json_str = json.dumps(saved_data, ensure_ascii=False)
     st.text_area("내 설정 데이터", value=json_str, height=100)
     new_json = st.text_input("복구할 데이터 붙여넣기")
@@ -142,7 +144,7 @@ with tab1:
                     ax[0].set_title(m['name'], fontsize=16, fontweight='bold'); st.pyplot(fig)
                 except: pass
 
-# --- Tab 2: 종목 리스트 (현재가 색상 적용) ---
+# --- Tab 2: 종목 리스트 ---
 with tab2:
     selected_market = st.radio("시장 선택", ["NASDAQ", "KOSPI"], horizontal=True, label_visibility="collapsed")
     codes = new_nas_codes if selected_market == "NASDAQ" else new_kos_codes
@@ -153,36 +155,22 @@ with tab2:
     for c, n in zip(codes, names):
         s = get_stock_info(c, n, selected_market)
         if s:
-            # 현재가(price)에도 {s['status']} 클래스를 추가하여 색상 적용
             st.markdown(f"""<div class="list-row">
-                <div class="list-item">{s['name']}</div><div class="list-item {s['status']}">{s['price']}</div><div class="list-item {s['status']}">{s['change']}</div>
+                <div class="list-item">{s['name']}</div><div class="list-item">{s['price']}</div><div class="list-item {s['status']}">{s['change']}</div>
             </div>""", unsafe_allow_html=True)
 
-# --- Tab 3: 개별 종목 차트 (요청 사항 반영) ---
+# --- Tab 3: 개별 종목 차트 (수정 완료!) ---
 with tab3:
-    # 종목 선택 리스트 구성 (이름 + 코드 조합)
-    current_codes = new_nas_codes if selected_market == "NASDAQ" else new_kos_codes
-    current_names = new_nas_names if selected_market == "NASDAQ" else new_kos_names
-    
-    # 딕셔너리로 이름-코드 매핑 (비어있는 코드 제외)
-    stock_options = {f"{n if n else c} ({c})": c for c, n in zip(current_codes, current_names) if c.strip()}
-    
-    if stock_options:
+    valid_codes = [c.strip().upper() for c in (new_nas_codes if selected_market == "NASDAQ" else new_kos_codes) if c.strip()]
+    if valid_codes:
+        # 상단 레이아웃 분할
         col1, col2 = st.columns([2, 1])
         with col1:
-            # 이름이 표시되도록 수정
-            selected_label = st.selectbox("📊 분석할 종목 선택", list(stock_options.keys()))
-            target_code = stock_options[selected_label]
-            # 제목용 이름 추출
-            display_name = selected_label.split(" (")[0]
+            target_code = st.selectbox("📊 분석할 종목 선택", valid_codes)
         with col2:
-            # "봉 종류" 텍스트 삭제 및 간소화
-            c_tf = st.radio("", ["시봉", "일봉", "주봉"], index=1, horizontal=True, label_visibility="collapsed")
+            c_tf = st.radio("⏰ 봉 종류", ["시봉", "일봉", "주봉"], index=1, horizontal=True)
             
-        plot_code = target_code.upper()
-        if selected_market == "KOSPI" and not (plot_code.endswith(".KS") or plot_code.endswith(".KQ")):
-            plot_code += ".KS"
-            
+        plot_code = target_code + ".KS" if selected_market == "KOSPI" and not (target_code.endswith(".KS") or target_code.endswith(".KQ")) else target_code
         t_map = {"시봉": ("1h", "7d"), "일봉": ("1d", "1y"), "주봉": ("1wk", "2y")}
         
         try:
@@ -191,14 +179,9 @@ with tab3:
                 curr, prev = data['Close'].iloc[-1], data['Close'].iloc[-2]
                 diff, pct = curr - prev, ((curr - prev) / prev) * 100
                 fig, ax = mpf.plot(data, type='candle', style=mpf.make_mpf_style(marketcolors=mpf.make_marketcolors(up='red', down='blue', inherit=True), gridstyle=':', y_on_right=True), figsize=(12, 7), returnfig=True)
-                
                 p_disp = f"{curr:,.2f}$" if selected_market == "NASDAQ" else f"{int(curr):,}"
                 d_disp = f"{diff:+.2f}" if selected_market == "NASDAQ" else f"{int(diff):+,}"
-                
-                # 차트 제목: 괄호 삭제 및 폰트 크기 2배 확대 (24 -> 48)
-                ax[0].set_title(f"{display_name}   {p_disp}   {d_disp}   {pct:+.2f}%", 
-                               fontsize=48, fontweight='bold', 
-                               color="red" if diff >= 0 else "blue", loc='center', pad=30)
+                ax[0].set_title(f"{target_code} ({c_tf})   {p_disp}   {d_disp} ({pct:+.2f}%)", fontsize=24, fontweight='bold', color="red" if diff >= 0 else "blue", loc='center', pad=20)
                 st.pyplot(fig)
             else: st.warning("데이터가 없습니다.")
         except: st.error("데이터 로드 실패")
