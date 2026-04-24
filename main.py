@@ -85,12 +85,11 @@ def get_stock_info(c, n, m_type):
             return {"name": l_name, "c_name": c_name, "code": ticker_sym, "price": p_disp, "change": c_disp, "status": "up" if diff >= 0 else "down"}
     except: return None
 
-# 5. 사이드바 - 설정 및 백업
+# 5. 사이드바 설정
 saved_data = load_settings()
 st.sidebar.title("🛠️ 설정 및 백업")
 
-with st.sidebar.expander("📝 설정 백업 및 복구", expanded=False):
-    st.write("설정 텍스트를 복사해서 따로 보관해 두세요.")
+with st.sidebar.expander("📝 설정 백업 및 복구"):
     json_str = json.dumps(saved_data, ensure_ascii=False)
     st.text_area("내 설정 데이터", value=json_str, height=100)
     new_json = st.text_input("복구할 데이터 붙여넣기")
@@ -143,7 +142,7 @@ with tab1:
                     ax[0].set_title(m['name'], fontsize=16, fontweight='bold'); st.pyplot(fig)
                 except: pass
 
-# --- Tab 2 ---
+# --- Tab 2: 종목 리스트 (현재가 색상 적용!) ---
 with tab2:
     selected_market = st.radio("시장 선택", ["NASDAQ", "KOSPI"], horizontal=True, label_visibility="collapsed")
     codes = new_nas_codes if selected_market == "NASDAQ" else new_kos_codes
@@ -154,11 +153,12 @@ with tab2:
     for c, n in zip(codes, names):
         s = get_stock_info(c, n, selected_market)
         if s:
+            # 현재가(price) 부분에도 s['status'] 클래스를 입혀 색상을 넣었습니다.
             st.markdown(f"""<div class="list-row">
-                <div class="list-item">{s['name']}</div><div class="list-item">{s['price']}</div><div class="list-item {s['status']}">{s['change']}</div>
+                <div class="list-item">{s['name']}</div><div class="list-item {s['status']}">{s['price']}</div><div class="list-item {s['status']}">{s['change']}</div>
             </div>""", unsafe_allow_html=True)
 
-# --- Tab 3: 개별 종목 차트 (요청 사항 반영 버전) ---
+# --- Tab 3: 개별 종목 차트 (제목 최적화 및 크기 확대!) ---
 with tab3:
     valid_codes = [c.strip().upper() for c in (new_nas_codes if selected_market == "NASDAQ" else new_kos_codes) if c.strip()]
     if valid_codes:
@@ -166,12 +166,9 @@ with tab3:
         with col1:
             target_code = st.selectbox("📊 분석할 종목 선택", valid_codes)
         with col2:
-            # "봉 종류" 라벨을 삭제하고 버튼만 표시
-            c_tf = st.radio("", ["시봉", "일봉", "주봉"], index=1, horizontal=True, key="chart_tf", label_visibility="collapsed")
+            c_tf = st.radio("", ["시봉", "일봉", "주봉"], index=1, horizontal=True, label_visibility="collapsed")
             
         plot_code = target_code + ".KS" if selected_market == "KOSPI" and not (target_code.endswith(".KS") or target_code.endswith(".KQ")) else target_code
-        
-        # 괄호 안 영문 표기 매핑 (글자 깨짐 방지)
         t_map = {"시봉": ("1h", "7d", "Time"), "일봉": ("1d", "1y", "Day"), "주봉": ("1wk", "2y", "Week")}
         
         try:
@@ -184,10 +181,11 @@ with tab3:
                 p_disp = f"{curr:,.2f}$" if selected_market == "NASDAQ" else f"{int(curr):,}"
                 d_disp = f"{diff:+.2f}" if selected_market == "NASDAQ" else f"{int(diff):+,}"
                 
-                # 괄호 안을 영문(Time, Day, Week)으로 변경하여 제목 설정
-                ax[0].set_title(f"{target_code} ({t_map[c_tf][2]})   {p_disp}   {d_disp} ({pct:+.2f}%)", 
-                               fontsize=24, fontweight='bold', 
-                               color="red" if diff >= 0 else "blue", loc='center', pad=20)
+                # 차트 제목 수정: 모든 괄호 제거 + 영문 주기 삭제 + 글자 크기 유지
+                # 탭 2의 글자 크기에 맞춰 시각적 균형을 조절했습니다.
+                ax[0].set_title(f"{target_code}    {p_disp}    {d_disp}    {pct:+.2f}%", 
+                               fontsize=28, fontweight='bold', 
+                               color="red" if diff >= 0 else "blue", loc='center', pad=25)
                 st.pyplot(fig)
             else: st.warning("데이터가 없습니다.")
         except: st.error("데이터 로드 실패")
