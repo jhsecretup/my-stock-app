@@ -24,18 +24,30 @@ def load_settings():
         else: data[key] = (data[key] + [""] * 50)[:50]
     return data
 
-# 3. 스타일 시트 (디자인 유지 및 사이드바 가로폭 조정)
+# 3. 스타일 시트 (리스트 정렬 및 굵기 수정)
 st.markdown("""
     <style>
     .block-container { padding-top: 2rem !important; }
     .title-style { font-size: 1.6rem !important; font-weight: bold; margin-bottom: 1.5rem; color: #333; text-align: center; }
     [data-testid="stSidebar"] div[data-testid="stHorizontalBlock"] { width: 55% !important; flex-wrap: nowrap !important; gap: 5px !important; }
     div[data-testid="stTextInput"] div[data-baseweb="base-input"] { min-height: 28px !important; height: 28px !important; }
+    
     .metric-container { text-align: center; margin-bottom: 15px; }
     .metric-text { font-size: 1.4rem !important; font-weight: bold; }
+    
+    /* 종목 리스트 전용 스타일: 정확히 3등분 + 가운데 정렬 + 굵은 글씨 */
+    .list-header { 
+        display: flex; background-color: #f8f9fa; padding: 12px 0; 
+        border-top: 2px solid #333; border-bottom: 1px solid #dee2e6;
+        font-weight: bold; font-size: 1rem;
+    }
+    .list-row { 
+        display: flex; padding: 12px 0; border-bottom: 1px solid #eee; 
+        font-weight: bold; font-size: 1.05rem;
+    }
+    .list-col { flex: 1; text-align: center; } /* 33.3%씩 등분 */
+    
     .up { color: #ef5350; } .down { color: #1e88e5; }
-    .list-row { display: flex; justify-content: space-around; align-items: center; padding: 10px 15px; border-bottom: 1px solid #eee; text-align: center; }
-    .list-item { font-size: 1.1rem; font-weight: bold; flex: 1; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -66,11 +78,11 @@ def get_stock_info(c, n, m_type):
             curr, prev = hist['Close'].iloc[-1], hist['Close'].iloc[-2]
             diff, pct = curr - prev, ((curr-prev)/prev)*100
             p_disp = f"{curr:,.2f}$" if m_type == "NASDAQ" else f"{int(curr):,}"
-            c_disp = f"{abs(diff):,.2f} ({abs(pct):.2f}%)" if m_type == "NASDAQ" else f"{int(abs(diff)):,} ({abs(pct):.2f}%)"
+            c_disp = f"{pct:+.2f}%" # + 기호 포함
             return {"name": n if n.strip() else c, "price": p_disp, "change": c_disp, "status": "up" if diff >= 0 else "down"}
     except: return None
 
-# 5. 사이드바 설정 센터
+# 5. 사이드바 설정
 saved_data = load_settings()
 st.sidebar.title("🛠️ 종목 설정 센터")
 input_tab_nas, input_tab_kos = st.sidebar.tabs(["🇺🇸 NASDAQ", "🇰🇷 KOSPI"])
@@ -99,7 +111,7 @@ if st.sidebar.button("💾 설정 영구 저장", use_container_width=True, type
 st.markdown('<div class="title-style">📈 비서표 투자 대시보드</div>', unsafe_allow_html=True)
 t1, t2, t3, t4 = st.tabs(["🏠 시장 지표", "📋 종목 리스트", "📊 차트 분석", "💎 기업 가치 분석"])
 
-with t1: # 원래 좋아하시던 스타일로 복구
+with t1:
     m_info = get_market_data()
     if m_info:
         cols = st.columns(4)
@@ -117,25 +129,42 @@ with t1: # 원래 좋아하시던 스타일로 복구
                 except: pass
 
 with t2:
-    sel_market = st.radio("시장", ["NASDAQ", "KOSPI"], horizontal=True, key="m2")
+    sel_market = st.radio("시장 선택", ["NASDAQ", "KOSPI"], horizontal=True, key="m2_list")
     codes = new_nas_codes if sel_market == "NASDAQ" else new_kos_codes
     names = new_nas_names if sel_market == "NASDAQ" else new_kos_names
-    st.markdown('<div class="list-row" style="background:#f8f9fa; font-weight:bold;"><div>종목명</div><div>현재가</div><div>등락률</div></div>', unsafe_allow_html=True)
+    
+    # 헤더 부분
+    st.markdown(f"""
+        <div class="list-header">
+            <div class="list-col">종목명</div>
+            <div class="list-col">현재가</div>
+            <div class="list-col">등락률</div>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    # 리스트 데이터 부분
     for c, n in zip(codes, names):
         if c.strip():
             s = get_stock_info(c, n, sel_market)
-            if s: st.markdown(f'<div class="list-row"><div>{s["name"]}</div><div class="{s["status"]}">{s["price"]}</div><div class="{s["status"]}">{s["change"]}</div></div>', unsafe_allow_html=True)
+            if s:
+                st.markdown(f"""
+                    <div class="list-row">
+                        <div class="list-col">{s['name']}</div>
+                        <div class="list-col {s['status']}">{s['price']}</div>
+                        <div class="list-col {s['status']}">{s['change']}</div>
+                    </div>
+                    """, unsafe_allow_html=True)
 
-with t3: # 차트 기능 복구
-    sel_market_c = st.radio("시장 선택", ["NASDAQ", "KOSPI"], horizontal=True, key="m3")
+with t3:
+    sel_market_c = st.radio("시장 선택", ["NASDAQ", "KOSPI"], horizontal=True, key="m3_chart")
     c_codes = new_nas_codes if sel_market_c == "NASDAQ" else new_kos_codes
     c_names = new_nas_names if sel_market_c == "NASDAQ" else new_kos_names
     stock_opts = { (n.strip() if n.strip() else c.strip().upper()): c.strip().upper() for c, n in zip(c_codes, c_names) if c.strip() }
     
     if stock_opts:
         col1, col2 = st.columns([2, 1])
-        with col1: sel_stock = st.selectbox("📊 분석 종목", list(stock_opts.keys()))
-        with col2: tf = st.radio("⏰ 주기", ["시봉", "일봉", "주봉"], index=1, horizontal=True)
+        with col1: sel_stock = st.selectbox("📊 분석 종목", list(stock_opts.keys()), key="chart_select_box")
+        with col2: tf = st.radio("⏰ 주기", ["시봉", "일봉", "주봉"], index=1, horizontal=True, key="chart_tf")
         
         target = stock_opts[sel_stock]
         if sel_market_c == "KOSPI" and not (target.endswith(".KS") or target.endswith(".KQ")): target += ".KS"
@@ -151,9 +180,9 @@ with t3: # 차트 기능 복구
                 st.pyplot(fig)
         except: st.error("데이터를 가져올 수 없습니다.")
 
-with t4: # 기업 가치 분석 탭 (정상 유지 및 소수점 정리)
+with t4:
     st.subheader("💎 기업 가치 상세 분석 (시총/PER/PBR)")
-    m_val = st.radio("분석 시장", ["NASDAQ", "KOSPI"], horizontal=True, key="m4")
+    m_val = st.radio("분석 시장", ["NASDAQ", "KOSPI"], horizontal=True, key="m4_val")
     v_codes = [c for c in (new_nas_codes if m_val == "NASDAQ" else new_kos_codes) if c.strip()]
     
     if st.button("🚀 데이터 분석 시작", use_container_width=True):
