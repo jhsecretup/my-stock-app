@@ -24,7 +24,7 @@ def load_settings():
         else: data[key] = (data[key] + [""] * 50)[:50]
     return data
 
-# 3. 스타일 시트 (디자인 유지 및 리스트 정렬 보정)
+# 3. 스타일 시트 (탭 글자 크기 및 디자인 보정)
 st.markdown("""
     <style>
     .block-container { padding-top: 3rem !important; }
@@ -37,6 +37,12 @@ st.markdown("""
         gap: 5px !important;
     }
     
+    /* 사이드바 탭 글자 크기 키우기 */
+    button[data-baseweb="tab"] p {
+        font-size: 1.1rem !important;
+        font-weight: bold !important;
+    }
+    
     div[data-testid="stTextInput"] div[data-baseweb="base-input"] {
         min-height: 28px !important;
         height: 28px !important;
@@ -44,7 +50,7 @@ st.markdown("""
     
     /* 메인 리스트 스타일 */
     .metric-container { text-align: center; margin-bottom: 15px; }
-    .metric-text { font-size: 1.5rem !important; font-weight: bold; white-space: nowrap; }
+    .metric-text { font-size: 1.25rem !important; font-weight: bold; white-space: nowrap; }
     .up { color: #ef5350; } .down { color: #1e88e5; }
     
     .list-row { 
@@ -68,7 +74,14 @@ def parse_display_names(raw_name, ticker):
 
 @st.cache_data(ttl=10)
 def get_market_data():
-    tickers = {"KOSPI": "^KS11", "NASDAQ": "^IXIC", "GOLD": "GC=F", "USD-KRW": "KRW=X"}
+    # 브라질 헤알-원(BRLKRW=X) 추가
+    tickers = {
+        "KOSPI": "^KS11", 
+        "NASDAQ": "^IXIC", 
+        "USD-KRW": "KRW=X",
+        "BRL-KRW": "BRLKRW=X",
+        "GOLD": "GC=F"
+    }
     info = []
     for name, ticker in tickers.items():
         try:
@@ -77,7 +90,8 @@ def get_market_data():
                 curr, prev = hist['Close'].iloc[-1], hist['Close'].iloc[-2]
                 diff, pct = curr - prev, ((curr - prev) / prev) * 100
                 status, sym = ("up", "▲") if diff >= 0 else ("down", "▼")
-                val = f"{curr:,.2f}   {sym}{abs(diff):,.2f} ({abs(pct):.2f}%)"
+                # 환율은 소수점 2자리까지, 지수는 가독성 있게 표시
+                val = f"{curr:,.2f}  {sym}{abs(diff):,.2f} ({abs(pct):.2f}%)"
                 info.append({"name": name, "val": val, "status": status, "ticker": ticker})
         except: pass
     return info
@@ -102,7 +116,8 @@ def get_stock_info(c, n, m_type):
 saved_data = load_settings()
 st.sidebar.title("🛠️ 종목 설정 센터")
 st.sidebar.subheader("📌 종목 리스트 편집 (50개)")
-input_tab_nas, input_tab_kos = st.sidebar.tabs(["🇺🇸 NASDAQ", "🇰🇷 KOSPI"])
+# 탭 이름 변경: US NASDAQ -> NASDAQ
+input_tab_nas, input_tab_kos = st.sidebar.tabs(["NASDAQ", "KOSPI"])
 
 def render_inputs(tab, codes, names, prefix):
     new_c, new_n = [], []
@@ -127,15 +142,13 @@ if st.sidebar.button("💾 모든 설정 영구 저장", use_container_width=Tru
         json.dump(updated_data, f, ensure_ascii=False, indent=4)
     st.rerun()
 
-# --- [핵심 기능] JSON 텍스트 추출기 ---
+# --- JSON 텍스트 추출기 ---
 st.sidebar.divider()
 st.sidebar.subheader("📋 깃허브용 JSON 복사")
 with st.sidebar.expander("여기를 클릭해서 텍스트 복사"):
     current_json_data = {
-        "nas_codes": new_nas_codes,
-        "nas_names": new_nas_names,
-        "kos_codes": new_kos_codes,
-        "kos_names": new_kos_names
+        "nas_codes": new_nas_codes, "nas_names": new_nas_names,
+        "kos_codes": new_kos_codes, "kos_names": new_kos_names
     }
     json_string = json.dumps(current_json_data, ensure_ascii=False, indent=4)
     st.code(json_string, language='json')
@@ -148,11 +161,13 @@ tab1, tab2, tab3 = st.tabs(["🏠 시장 지표", "📋 종목 리스트", "📊
 with tab1:
     m_info = get_market_data()
     if m_info:
-        cols = st.columns(4)
+        # 지표가 5개로 늘어났으므로 컬럼 수를 조정하거나 자동 배치되게 함
+        cols = st.columns(len(m_info))
         for i, m in enumerate(m_info):
             with cols[i]:
-                st.markdown(f'<div class="metric-container"><div class="metric-label" style="text-align:center; color:#666;">{m["name"]}</div><div class="metric-text {m["status"]}">{m["val"]}</div></div>', unsafe_allow_html=True)
+                st.markdown(f'<div class="metric-container"><div class="metric-label" style="text-align:center; color:#666; font-size:0.9rem;">{m["name"]}</div><div class="metric-text {m["status"]}">{m["val"]}</div></div>', unsafe_allow_html=True)
         st.divider()
+        # 차트는 주요 지수 위주로 상위 4개만 표시
         c_cols = st.columns(2)
         for idx, m in enumerate(m_info[:4]):
             with c_cols[idx % 2]:
