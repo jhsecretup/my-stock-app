@@ -8,7 +8,7 @@ import os
 # 1. 페이지 설정
 st.set_page_config(page_title="비서표 투자 대시보드", layout="wide")
 
-# 2. 데이터 로드/보정 함수 (IndexError 및 휘발성 저장 방어)
+# 2. 데이터 로드/보정 함수 (50개 확장 반영)
 def load_settings():
     if 'current_settings' in st.session_state:
         data = st.session_state.current_settings
@@ -21,12 +21,13 @@ def load_settings():
     else:
         data = {}
 
-    # 모든 리스트를 무조건 20개로 맞춤
+    # [수정] 모든 리스트를 무조건 50개로 맞춤 (기존 20개에서 확장)
     for key in ['nas_codes', 'nas_names', 'kos_codes', 'kos_names']:
         if key not in data:
-            data[key] = [""] * 20
+            data[key] = [""] * 50
         else:
-            data[key] = (data[key] + [""] * 20)[:20]
+            # 기존 데이터 유지하면서 50개로 길이 조정
+            data[key] = (data[key] + [""] * 50)[:50]
     return data
 
 # 3. 스타일 시트
@@ -41,10 +42,18 @@ st.markdown("""
     .list-row { display: flex; justify-content: space-around; align-items: center; padding: 10px 15px; border-bottom: 1px solid #eee; text-align: center; }
     .list-item { font-size: 1.1rem; font-weight: bold; flex: 1; }
     .list-header { font-size: 1rem; font-weight: bold; color: #555; flex: 1; }
+    /* 사이드바 탭 스타일 조정 */
+    .stTabs [data-baseweb="tab-list"] { gap: 10px; }
+    .stTabs [data-baseweb="tab"] { 
+        height: 40px; 
+        background-color: #f0f2f6; 
+        border-radius: 5px; 
+        padding: 0 20px;
+    }
     </style>
     """, unsafe_allow_html=True)
 
-# 4. 유틸리티 로직
+# 4. 유틸리티 로직 (기존 로직 유지)
 def parse_display_names(raw_name, ticker):
     if not raw_name: return ticker, ticker
     if '/' in raw_name:
@@ -88,14 +97,14 @@ def get_stock_info(c, n, m_type):
 
 # 5. 사이드바 - 설정 및 백업
 saved_data = load_settings()
-st.sidebar.title("🛠️ 설정 및 백업")
+st.sidebar.title("🛠️ 종목 설정 센터")
 
-with st.sidebar.expander("📝 설정 백업 및 복구", expanded=False):
-    st.write("설정 텍스트를 복사해서 따로 보관해 두세요.")
+# 백업/복구 영역 (기존 유지)
+with st.sidebar.expander("📝 데이터 백업/복구", expanded=False):
     json_str = json.dumps(saved_data, ensure_ascii=False)
-    st.text_area("내 설정 데이터", value=json_str, height=100)
-    new_json = st.text_input("복구할 데이터 붙여넣기")
-    if st.button("🔄 데이터로 리스트 복구"):
+    st.text_area("내 설정 데이터 (복사 가능)", value=json_str, height=100)
+    new_json = st.text_input("복구 데이터 붙여넣기")
+    if st.button("🔄 즉시 복구하기"):
         try:
             st.session_state.current_settings = json.loads(new_json)
             st.rerun()
@@ -103,26 +112,46 @@ with st.sidebar.expander("📝 설정 백업 및 복구", expanded=False):
 
 st.sidebar.divider()
 
+# [핵심 수정] 나스닥/코스피 입력창 전환 탭
+st.sidebar.subheader("📌 종목 리스트 편집 (각 50개)")
+input_tab_nas, input_tab_kos = st.sidebar.tabs(["🇺🇸 NASDAQ", "🇰🇷 KOSPI"])
+
 new_nas_codes, new_nas_names = [], []
-with st.sidebar.expander("🇺🇸 NASDAQ 종목 (20)", expanded=True):
-    for i in range(20):
-        new_nas_codes.append(st.text_input(f"NAS 코드 {i+1}", value=saved_data['nas_codes'][i], key=f"nc{i}"))
-        new_nas_names.append(st.text_input(f"NAS 이름 {i+1}", value=saved_data['nas_names'][i], key=f"nn{i}"))
+with input_tab_nas:
+    for i in range(50):
+        # 모바일에서도 보기 좋게 가로 배치
+        c1, c2 = st.columns([1, 1])
+        with c1:
+            code = st.text_input(f"NAS 코드 {i+1}", value=saved_data['nas_codes'][i], key=f"nc{i}", label_visibility="collapsed", placeholder=f"코드 {i+1}")
+        with c2:
+            name = st.text_input(f"NAS 이름 {i+1}", value=saved_data['nas_names'][i], key=f"nn{i}", label_visibility="collapsed", placeholder=f"이름 {i+1}")
+        new_nas_codes.append(code)
+        new_nas_names.append(name)
 
 new_kos_codes, new_kos_names = [], []
-with st.sidebar.expander("🇰🇷 KOSPI 종목 (20)", expanded=False):
-    for i in range(20):
-        new_kos_codes.append(st.text_input(f"KOS 코드 {i+1}", value=saved_data['kos_codes'][i], key=f"kc{i}"))
-        new_kos_names.append(st.text_input(f"KOS 이름 {i+1}", value=saved_data['kos_names'][i], key=f"kn{i}"))
+with input_tab_kos:
+    for i in range(50):
+        c1, c2 = st.columns([1, 1])
+        with c1:
+            code = st.text_input(f"KOS 코드 {i+1}", value=saved_data['kos_codes'][i], key=f"kc{i}", label_visibility="collapsed", placeholder=f"코드 {i+1}")
+        with c2:
+            name = st.text_input(f"KOS 이름 {i+1}", value=saved_data['kos_names'][i], key=f"kn{i}", label_visibility="collapsed", placeholder=f"이름 {i+1}")
+        new_kos_codes.append(code)
+        new_kos_names.append(name)
 
-if st.sidebar.button("💾 리스트 임시 저장", use_container_width=True):
-    updated_data = {"nas_codes": new_nas_codes, "nas_names": new_nas_names, "kos_codes": new_kos_codes, "kos_names": new_kos_names}
+st.sidebar.divider()
+if st.sidebar.button("💾 모든 설정 영구 저장", use_container_width=True, type="primary"):
+    updated_data = {
+        "nas_codes": new_nas_codes, "nas_names": new_nas_names, 
+        "kos_codes": new_kos_codes, "kos_names": new_kos_names
+    }
     st.session_state.current_settings = updated_data
     with open('stock_settings.json', 'w', encoding='utf-8') as f:
-        json.dump(updated_data, f, ensure_ascii=False)
-    st.sidebar.success("저장 완료!")
+        json.dump(updated_data, f, ensure_ascii=False, indent=4)
+    st.sidebar.success("100개 종목 저장 완료!")
+    st.rerun()
 
-# 6. 메인 레이아웃
+# 6. 메인 레이아웃 (기존 로직 유지하되 확장된 리스트 대응)
 st.markdown('<div class="title-style">📈 비서표 투자 대시보드</div>', unsafe_allow_html=True)
 tab1, tab2, tab3 = st.tabs(["🏠 시장 지표", "📋 종목 리스트", "📊 개별 종목 차트"])
 
@@ -146,41 +175,41 @@ with tab1:
 
 # --- Tab 2: 종목 리스트 ---
 with tab2:
-    selected_market = st.radio("시장 선택", ["NASDAQ", "KOSPI"], horizontal=True, label_visibility="collapsed")
+    selected_market = st.radio("표시 시장", ["NASDAQ", "KOSPI"], horizontal=True, label_visibility="collapsed")
     codes = new_nas_codes if selected_market == "NASDAQ" else new_kos_codes
     names = new_nas_names if selected_market == "NASDAQ" else new_kos_names
+    
     st.markdown(f"""<div class="list-row" style="background-color: #f8f9fa; border-top: 2px solid #333; margin-top: 5px;">
         <div class="list-header">종목명</div><div class="list-header">현재가</div><div class="list-header">등락률</div>
     </div>""", unsafe_allow_html=True)
+    
+    # 50개 리스트를 돌며 데이터가 있는 것만 출력
     for c, n in zip(codes, names):
-        s = get_stock_info(c, n, selected_market)
-        if s:
-            # 현재가에도 status(up/down) 색상 적용
-            st.markdown(f"""<div class="list-row">
-                <div class="list-item">{s['name']}</div><div class="list-item {s['status']}">{s['price']}</div><div class="list-item {s['status']}">{s['change']}</div>
-            </div>""", unsafe_allow_html=True)
+        if c.strip():
+            s = get_stock_info(c, n, selected_market)
+            if s:
+                st.markdown(f"""<div class="list-row">
+                    <div class="list-item">{s['name']}</div><div class="list-item {s['status']}">{s['price']}</div><div class="list-item {s['status']}">{s['change']}</div>
+                </div>""", unsafe_allow_html=True)
 
-# --- Tab 3: 개별 종목 차트 (요청 사항 반영) ---
+# --- Tab 3: 개별 종목 차트 ---
 with tab3:
-    # 유효한 종목만 필터링 (이름과 코드를 묶어서 딕셔너리 생성)
     current_codes = new_nas_codes if selected_market == "NASDAQ" else new_kos_codes
     current_names = new_nas_names if selected_market == "NASDAQ" else new_kos_names
     
     stock_options = {}
     for c, n in zip(current_codes, current_names):
         if c.strip():
-            # 화면에 표시될 이름 결정 (이름이 없으면 코드로)
             display_name = n.strip() if n.strip() else c.strip().upper()
             stock_options[display_name] = c.strip().upper()
 
     if stock_options:
-        col1, col2 = st.columns([2, 1])
-        with col1:
-            # 선택은 이름으로, 결과는 코드로 받기
-            selected_name = st.selectbox("📊 분석할 종목 선택", list(stock_options.keys()))
+        col_s1, col_s2 = st.columns([2, 1])
+        with col_s1:
+            selected_name = st.selectbox("📊 분석할 종목 선택", list(stock_options.keys()), key="chart_select")
             target_code = stock_options[selected_name]
-        with col2:
-            c_tf = st.radio("⏰ 봉 종류", ["시봉", "일봉", "주봉"], index=1, horizontal=True)
+        with col_s2:
+            c_tf = st.radio("⏰ 봉 종류", ["시봉", "일봉", "주봉"], index=1, horizontal=True, key="time_frame")
             
         plot_code = target_code + ".KS" if selected_market == "KOSPI" and not (target_code.endswith(".KS") or target_code.endswith(".KQ")) else target_code
         t_map = {"시봉": ("1h", "7d"), "일봉": ("1d", "1y"), "주봉": ("1wk", "2y")}
@@ -193,7 +222,6 @@ with tab3:
                 fig, ax = mpf.plot(data, type='candle', style=mpf.make_mpf_style(marketcolors=mpf.make_marketcolors(up='red', down='blue', inherit=True), gridstyle=':', y_on_right=True), figsize=(12, 7), returnfig=True)
                 p_disp = f"{curr:,.2f}$" if selected_market == "NASDAQ" else f"{int(curr):,}"
                 d_disp = f"{diff:+.2f}" if selected_market == "NASDAQ" else f"{int(diff):+,}"
-                # 차트 제목의 괄호 삭제
                 ax[0].set_title(f"{selected_name} {c_tf}   {p_disp}   {d_disp} ({pct:+.2f}%)", fontsize=24, fontweight='bold', color="red" if diff >= 0 else "blue", loc='center', pad=20)
                 st.pyplot(fig)
             else: st.warning("데이터가 없습니다.")
