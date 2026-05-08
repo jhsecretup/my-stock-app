@@ -24,7 +24,7 @@ def load_settings():
         else: data[key] = (data[key] + [""] * 50)[:50]
     return data
 
-# 3. 스타일 시트 (탭 글자 크기 및 디자인 보정)
+# 3. 스타일 시트
 st.markdown("""
     <style>
     .block-container { padding-top: 3rem !important; }
@@ -39,7 +39,7 @@ st.markdown("""
     
     /* 사이드바 탭 글자 크기 키우기 */
     button[data-baseweb="tab"] p {
-        font-size: 1.1rem !important;
+        font-size: 1.2rem !important;
         font-weight: bold !important;
     }
     
@@ -48,11 +48,13 @@ st.markdown("""
         height: 28px !important;
     }
     
-    /* 메인 리스트 스타일 */
-    .metric-container { text-align: center; margin-bottom: 15px; }
-    .metric-text { font-size: 1.25rem !important; font-weight: bold; white-space: nowrap; }
+    /* 메인 지표 스타일 */
+    .metric-container { text-align: center; margin-bottom: 15px; padding: 10px; background: #fbfbfb; border-radius: 10px; }
+    .metric-label { color: #666; font-size: 0.9rem; margin-bottom: 5px; }
+    .metric-text { font-size: 1.2rem !important; font-weight: bold; white-space: nowrap; }
     .up { color: #ef5350; } .down { color: #1e88e5; }
     
+    /* 리스트 스타일 */
     .list-row { 
         display: flex; justify-content: space-around; align-items: center; 
         padding: 10px 15px; border-bottom: 1px solid #eee; text-align: center; 
@@ -74,26 +76,31 @@ def parse_display_names(raw_name, ticker):
 
 @st.cache_data(ttl=10)
 def get_market_data():
-    # 브라질 헤알-원(BRLKRW=X) 추가
-    tickers = {
-        "KOSPI": "^KS11", 
-        "NASDAQ": "^IXIC", 
-        "USD-KRW": "KRW=X",
-        "BRL-KRW": "BRLKRW=X",
-        "GOLD": "GC=F"
-    }
+    # 티커 사전 (브라질 헤알-원 포함)
+    target_tickers = [
+        ("KOSPI", "^KS11"),
+        ("NASDAQ", "^IXIC"),
+        ("USD-KRW", "KRW=X"),
+        ("BRL-KRW", "BRLKRW=X"),
+        ("GOLD", "GC=F")
+    ]
     info = []
-    for name, ticker in tickers.items():
+    for name, ticker in target_tickers:
         try:
-            hist = yf.Ticker(ticker).history(period="2d")
-            if not hist.empty and len(hist) >= 2:
-                curr, prev = hist['Close'].iloc[-1], hist['Close'].iloc[-2]
+            stock = yf.Ticker(ticker)
+            hist = stock.history(period="2d")
+            if not hist.empty and len(hist) >= 1:
+                # 2일 데이터가 없으면 오늘 데이터라도 가져옴
+                curr = hist['Close'].iloc[-1]
+                prev = hist['Close'].iloc[-2] if len(hist) >= 2 else hist['Open'].iloc[-1]
                 diff, pct = curr - prev, ((curr - prev) / prev) * 100
                 status, sym = ("up", "▲") if diff >= 0 else ("down", "▼")
-                # 환율은 소수점 2자리까지, 지수는 가독성 있게 표시
                 val = f"{curr:,.2f}  {sym}{abs(diff):,.2f} ({abs(pct):.2f}%)"
                 info.append({"name": name, "val": val, "status": status, "ticker": ticker})
-        except: pass
+            else:
+                info.append({"name": name, "val": "데이터 대기 중", "status": "down", "ticker": ticker})
+        except:
+            info.append({"name": name, "val": "연결 지연", "status": "down", "ticker": ticker})
     return info
 
 def get_stock_info(c, n, m_type):
@@ -116,7 +123,6 @@ def get_stock_info(c, n, m_type):
 saved_data = load_settings()
 st.sidebar.title("🛠️ 종목 설정 센터")
 st.sidebar.subheader("📌 종목 리스트 편집 (50개)")
-# 탭 이름 변경: US NASDAQ -> NASDAQ
 input_tab_nas, input_tab_kos = st.sidebar.tabs(["NASDAQ", "KOSPI"])
 
 def render_inputs(tab, codes, names, prefix):
@@ -134,7 +140,6 @@ def render_inputs(tab, codes, names, prefix):
 new_nas_codes, new_nas_names = render_inputs(input_tab_nas, saved_data['nas_codes'], saved_data['nas_names'], "nc")
 new_kos_codes, new_kos_names = render_inputs(input_tab_kos, saved_data['kos_codes'], saved_data['kos_names'], "kc")
 
-# 설정 저장 버튼
 if st.sidebar.button("💾 모든 설정 영구 저장", use_container_width=True, type="primary"):
     updated_data = {"nas_codes": new_nas_codes, "nas_names": new_nas_names, "kos_codes": new_kos_codes, "kos_names": new_kos_names}
     st.session_state.current_settings = updated_data
@@ -142,14 +147,11 @@ if st.sidebar.button("💾 모든 설정 영구 저장", use_container_width=Tru
         json.dump(updated_data, f, ensure_ascii=False, indent=4)
     st.rerun()
 
-# --- JSON 텍스트 추출기 ---
+# JSON 추출기
 st.sidebar.divider()
 st.sidebar.subheader("📋 깃허브용 JSON 복사")
 with st.sidebar.expander("여기를 클릭해서 텍스트 복사"):
-    current_json_data = {
-        "nas_codes": new_nas_codes, "nas_names": new_nas_names,
-        "kos_codes": new_kos_codes, "kos_names": new_kos_names
-    }
+    current_json_data = {"nas_codes": new_nas_codes, "nas_names": new_nas_names, "kos_codes": new_kos_codes, "kos_names": new_kos_names}
     json_string = json.dumps(current_json_data, ensure_ascii=False, indent=4)
     st.code(json_string, language='json')
     st.caption("위 내용을 복사해 깃허브 stock_settings.json에 붙여넣으세요.")
@@ -161,20 +163,27 @@ tab1, tab2, tab3 = st.tabs(["🏠 시장 지표", "📋 종목 리스트", "📊
 with tab1:
     m_info = get_market_data()
     if m_info:
-        # 지표가 5개로 늘어났으므로 컬럼 수를 조정하거나 자동 배치되게 함
-        cols = st.columns(len(m_info))
-        for i, m in enumerate(m_info):
-            with cols[i]:
-                st.markdown(f'<div class="metric-container"><div class="metric-label" style="text-align:center; color:#666; font-size:0.9rem;">{m["name"]}</div><div class="metric-text {m["status"]}">{m["val"]}</div></div>', unsafe_allow_html=True)
+        # 지표 출력 (강제 5개 컬럼)
+        m_cols = st.columns(5)
+        for idx, m in enumerate(m_info):
+            with m_cols[idx]:
+                st.markdown(f"""
+                    <div class="metric-container">
+                        <div class="metric-label">{m['name']}</div>
+                        <div class="metric-text {m['status']}">{m['val']}</div>
+                    </div>
+                """, unsafe_allow_html=True)
+        
         st.divider()
-        # 차트는 주요 지수 위주로 상위 4개만 표시
+        # 차트 출력 (상위 4개)
         c_cols = st.columns(2)
         for idx, m in enumerate(m_info[:4]):
             with c_cols[idx % 2]:
                 try:
                     data = yf.Ticker(m['ticker']).history(period="1y").tail(40)
                     fig, ax = mpf.plot(data, type='candle', style=mpf.make_mpf_style(marketcolors=mpf.make_marketcolors(up='red', down='blue', inherit=True), gridstyle=':', y_on_right=True), figsize=(10, 6), returnfig=True)
-                    ax[0].set_title(m['name'], fontsize=16, fontweight='bold'); st.pyplot(fig)
+                    ax[0].set_title(m['name'], fontsize=16, fontweight='bold')
+                    st.pyplot(fig)
                 except: pass
 
 with tab2:
