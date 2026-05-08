@@ -14,71 +14,79 @@ def load_my_stocks():
             with open('stock_settings.json', 'r', encoding='utf-8') as f:
                 return json.load(f)
         except: pass
-    # 파일이 없거나 에러 시 빈 리스트 반환
     return {"nas_codes": [], "nas_names": [], "kos_codes": [], "kos_names": []}
 
-# 3. 스타일 설정 (타이틀 크기 및 디자인)
+# 3. 스타일 설정 (콤팩트 레이아웃)
 st.markdown("""
     <style>
+    /* 상단 여백 최소화 */
+    .block-container { padding-top: 1rem !important; }
+    
+    /* 타이틀 스타일: 대시보드처럼 상단에 밀착 */
     .main-title { 
-        font-size: 1.8rem !important; 
+        font-size: 1.6rem !important; 
         font-weight: bold; 
         color: #333; 
         text-align: center; 
-        margin-top: -1rem;
-        margin-bottom: 2rem; 
+        margin-bottom: 1rem; 
     }
-    .stButton>button { 
-        width: 100%; 
-        border-radius: 8px; 
-        font-weight: bold; 
-        height: 3rem; 
-        background-color: #1E88E5; 
-        color: white; 
-    }
-    /* 테이블 가독성 향상 */
-    .stDataFrame { border: 1px solid #eee; border-radius: 10px; }
+    
+    /* 라디오 버튼 및 버튼 높이 조절 */
+    div[data-testid="stRadio"] > div { gap: 10px; }
+    .stButton>button { height: 2.5rem; border-radius: 8px; font-weight: bold; }
+    
+    /* 테이블 폰트 크기 조절하여 더 많이 보이게 함 */
+    .stDataFrame { font-size: 0.9rem; }
     </style>
     """, unsafe_allow_html=True)
 
-# 수정된 간결한 타이틀
+# 상단 타이틀
 st.markdown('<div class="main-title">💎 기업가치분석</div>', unsafe_allow_html=True)
 
-# 4. 데이터 로드 및 시장 선택
+# 4. 데이터 준비
 stocks = load_my_stocks()
-col1, col2 = st.columns([1, 1])
+
+# 상단 컨트롤바 (1줄 구성)
+col1, col2, col3 = st.columns([1.2, 2, 1])
+
 with col1:
-    market = st.radio("분석 시장 선택", ["🇺🇸 NASDAQ", "🇰🇷 KOSPI"], horizontal=True)
+    market = st.radio("시장", ["NASDAQ", "KOSPI"], horizontal=True, label_visibility="collapsed")
 
-# 종목 데이터 매핑
-codes = stocks['nas_codes'] if "NASDAQ" in market else stocks['kos_codes']
-names = stocks['nas_names'] if "NASDAQ" in market else stocks['kos_names']
-
-# 실제 데이터가 있는 종목만 추출
+# 종목 데이터 필터링
+codes = stocks['nas_codes'] if market == "NASDAQ" else stocks['kos_codes']
+names = stocks['nas_names'] if market == "NASDAQ" else stocks['kos_names']
 valid_stocks = [(c.strip(), n.strip()) for c, n in zip(codes, names) if c.strip()]
+count = len(valid_stocks)
 
-if not valid_stocks:
-    st.warning("등록된 종목이 없습니다. 메인 대시보드에서 종목을 먼저 등록해주세요.")
-else:
-    st.info(f"선택하신 {market} 시장의 {len(valid_stocks)}개 종목을 분석할 준비가 되었습니다.")
-    
-    if st.button("🚀 실시간 데이터 분석 시작"):
+with col2:
+    # 종목 선택란 옆에 (개수) 표시
+    st.markdown(f"<div style='padding-top:5px; font-weight:bold;'>분석 대상 종목 ({count}개)</div>", unsafe_allow_html=True)
+
+with col3:
+    run_analysis = st.button("🚀 분석 시작", use_container_width=True)
+
+st.divider()
+
+# 5. 분석 로직
+if run_analysis:
+    if not valid_stocks:
+        st.warning("등록된 종목이 없습니다.")
+    else:
         results = []
         progress_bar = st.progress(0)
         
         for i, (code, name) in enumerate(valid_stocks):
             try:
                 ticker = code.upper()
-                if "KOSPI" in market and not (ticker.endswith(".KS") or ticker.endswith(".KQ")):
+                if market == "KOSPI" and not (ticker.endswith(".KS") or ticker.endswith(".KQ")):
                     ticker += ".KS"
                 
                 stock_obj = yf.Ticker(ticker)
                 info = stock_obj.info
                 
-                # 시가총액 변환 로직
                 m_cap = info.get('marketCap', 0)
-                if "NASDAQ" in market:
-                    m_cap_disp = f"${m_cap/1e9:.1f}B" # 빌리언 달러 단위
+                if market == "NASDAQ":
+                    m_cap_disp = f"${m_cap/1e9:.1f}B"
                 else:
                     m_cap_disp = f"{m_cap/1e12:.1f}조" if m_cap >= 1e12 else f"{m_cap/1e8:.0f}억"
                 
@@ -94,16 +102,12 @@ else:
                 })
             except:
                 pass
-            
             progress_bar.progress((i + 1) / len(valid_stocks))
         
         if results:
             df = pd.DataFrame(results)
-            st.success("✅ 실시간 가치 분석이 완료되었습니다.")
-            
-            # 테이블 출력 (인덱스 제외)
+            # 결과 테이블 출력
             st.dataframe(df, use_container_width=True, hide_index=True)
-            
-            st.caption("※ PER, PBR, ROE 데이터는 Yahoo Finance에서 제공하는 최근 12개월(TTM) 기준 수치입니다.")
+            st.caption(f"최근 분석 시점: {pd.Timestamp.now().strftime('%Y-%m-%d %H:%M:%S')}")
         else:
-            st.error("데이터를 수집하는 중에 문제가 발생했습니다. 종목 코드를 확인해주세요.")
+            st.error("데이터 수집 실패")
