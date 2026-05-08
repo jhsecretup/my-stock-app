@@ -24,22 +24,26 @@ def load_settings():
         else: data[key] = (data[key] + [""] * 50)[:50]
     return data
 
-# 3. 스타일 시트 (모바일 강제 한 줄 레이아웃 추가)
+# 3. 스타일 시트 (가로 너비 절반 제한 및 디자인 조정)
 st.markdown("""
     <style>
     .block-container { padding-top: 3rem !important; }
     .title-style { font-size: 1.6rem !important; font-weight: bold; margin-bottom: 1.5rem; color: #333; text-align: center; }
     
-    /* [핵심] 모바일에서도 input창 두 개를 한 줄에 강제 배치 */
-    div[data-testid="column"] {
-        min-width: 0 !important;
-        flex: 1 1 0% !important;
-    }
-    div[data-testid="stHorizontalBlock"] {
+    /* [핵심] 사이드바 입력칸 전체 가로 폭을 50%로 제한 */
+    [data-testid="stSidebar"] div[data-testid="stHorizontalBlock"] {
+        width: 55% !important; /* 약간의 여유를 둔 절반 */
         flex-wrap: nowrap !important;
         gap: 5px !important;
     }
     
+    /* 입력창 높이는 V11.2의 콤팩트함 유지 */
+    div[data-testid="stTextInput"] div[data-baseweb="base-input"] {
+        min-height: 28px !important;
+        height: 28px !important;
+    }
+    
+    /* 메인 리스트 가독성 */
     .metric-container { text-align: center; margin-bottom: 15px; }
     .metric-text { font-size: 1.5rem !important; font-weight: bold; white-space: nowrap; }
     .up { color: #ef5350; } .down { color: #1e88e5; }
@@ -97,27 +101,20 @@ st.sidebar.title("🛠️ 종목 설정 센터")
 st.sidebar.subheader("📌 종목 리스트 편집 (50개씩)")
 input_tab_nas, input_tab_kos = st.sidebar.tabs(["🇺🇸 NASDAQ", "🇰🇷 KOSPI"])
 
-new_nas_codes, new_nas_names = [], []
-with input_tab_nas:
-    for i in range(50):
-        c1, c2 = st.columns([1.2, 2]) # 코드창을 조금 좁게, 이름창을 넓게 배분
-        with c1:
-            code = st.text_input(f"N_C{i}", value=saved_data['nas_codes'][i], key=f"nc{i}", label_visibility="collapsed", placeholder="코드")
-        with c2:
-            name = st.text_input(f"N_N{i}", value=saved_data['nas_names'][i], key=f"nn{i}", label_visibility="collapsed", placeholder="종목명")
-        new_nas_codes.append(code)
-        new_nas_names.append(name)
+def render_inputs(tab, codes, names, prefix):
+    new_c, new_n = [], []
+    with tab:
+        for i in range(50):
+            c1, c2 = st.columns([1.5, 2]) # 가로 폭 안에서의 비율
+            with c1:
+                code = st.text_input(f"{prefix}C{i}", value=codes[i], key=f"{prefix}c{i}", label_visibility="collapsed", placeholder="코드")
+            with c2:
+                name = st.text_input(f"{prefix}N{i}", value=names[i], key=f"{prefix}n{i}", label_visibility="collapsed", placeholder="종목명")
+            new_c.append(code); new_n.append(name)
+    return new_c, new_n
 
-new_kos_codes, new_kos_names = [], []
-with input_tab_kos:
-    for i in range(50):
-        c1, c2 = st.columns([1.2, 2])
-        with c1:
-            code = st.text_input(f"K_C{i}", value=saved_data['kos_codes'][i], key=f"kc{i}", label_visibility="collapsed", placeholder="코드")
-        with c2:
-            name = st.text_input(f"K_N{i}", value=saved_data['kos_names'][i], key=f"kn{i}", label_visibility="collapsed", placeholder="종목명")
-        new_kos_codes.append(code)
-        new_kos_names.append(name)
+new_nas_codes, new_nas_names = render_inputs(input_tab_nas, saved_data['nas_codes'], saved_data['nas_names'], "nc")
+new_kos_codes, new_kos_names = render_inputs(input_tab_kos, saved_data['kos_codes'], saved_data['kos_names'], "kc")
 
 if st.sidebar.button("💾 모든 설정 영구 저장", use_container_width=True, type="primary"):
     updated_data = {"nas_codes": new_nas_codes, "nas_names": new_nas_names, "kos_codes": new_kos_codes, "kos_names": new_kos_names}
@@ -126,7 +123,7 @@ if st.sidebar.button("💾 모든 설정 영구 저장", use_container_width=Tru
         json.dump(updated_data, f, ensure_ascii=False, indent=4)
     st.rerun()
 
-# 6. 메인 레이아웃 (V11.0 유지)
+# 6. 메인 레이아웃 (Tab 1, 2, 3 로직 유지)
 st.markdown('<div class="title-style">📈 비서표 투자 대시보드</div>', unsafe_allow_html=True)
 tab1, tab2, tab3 = st.tabs(["🏠 시장 지표", "📋 종목 리스트", "📊 개별 종목 차트"])
 
