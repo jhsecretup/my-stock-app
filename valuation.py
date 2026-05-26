@@ -172,7 +172,7 @@ if run_analysis:
                 "PER": st.column_config.NumberColumn("PER(이익)", format="%.2f"),
                 "PBR": st.column_config.NumberColumn("PBR(자산)", format="%.2f"),
                 "PSR": st.column_config.NumberColumn("PSR(매출)", format="%.2f"),
-                "ROE(%)": st.column_config.NumberColumn("ROE(자본이익%)", format="%.1f%%"),
+                "ROE(%)": st.column_config.NumberColumn("ROE(%)", format="%.1f%%"),
                 "RSI(14)": st.column_config.NumberColumn("RSI(14)", format="%.2f")
             }
             
