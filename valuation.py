@@ -169,10 +169,10 @@ if run_analysis:
                 "종목명": st.column_config.TextColumn("종목명"),
                 "시가총액": m_cap_config,
                 "현재가": price_config,
-                "PER": st.column_config.NumberColumn("PER", format="%.2f"),
-                "PBR": st.column_config.NumberColumn("PBR", format="%.2f"),
-                "PSR": st.column_config.NumberColumn("PSR", format="%.2f"),
-                "ROE(%)": st.column_config.NumberColumn("ROE(%)", format="%.1f%%"),
+                "PER(이익)": st.column_config.NumberColumn("PER", format="%.2f"),
+                "PBR(자산)": st.column_config.NumberColumn("PBR", format="%.2f"),
+                "PSR(매출)": st.column_config.NumberColumn("PSR", format="%.2f"),
+                "ROE(자본이익%)": st.column_config.NumberColumn("ROE(%)", format="%.1f%%"),
                 "RSI(14)": st.column_config.NumberColumn("RSI(14)", format="%.2f")
             }
             
